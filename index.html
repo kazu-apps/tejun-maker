@@ -251,9 +251,9 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
 
     <section class="card">
       <h2>切り戻し</h2>
-      <div class="field"><label>切り戻し発動基準</label><textarea id="f-trigger" placeholder="例: 手順5完了時点でサービス正常性が確認できない場合、22:45を過ぎても手順3が完了しない場合"></textarea></div>
       <div class="rows" id="rows-rollback"></div>
-      <button class="addbtn" data-add="rollback">＋ 切り戻し手順を追加</button>
+      <button class="addbtn" id="btnAddPlan">＋ 切り戻しパターンを追加</button>
+      <div class="pack-note">失敗する箇所で戻し方は変わります。「適用前に中断する場合」「適用後に戻す場合」のように、パターンごとに発動基準と手順を分けて書けます。</div>
     </section>
 
     <section class="card">
@@ -340,7 +340,7 @@ function emptyState(){
   return {
     meta:{title:"",docid:"",datetime:"",system:"",place:"",worker:"",checker:""},
     purpose:"",scope:"",precond:"",
-    pre:[], steps:[], trigger:"", rollback:[], verify:[], notes:""
+    pre:[], steps:[], rollback:[], verify:[], notes:""
   };
 }
 
@@ -369,10 +369,14 @@ function sampleState(){
       {title:"サービス起動を確認する", cmd:"systemctl status nginx --no-pager", expect:"active (running) であること"},
       {title:"LBへweb01を復帰させる", cmd:"lbctl attach web01", expect:"attached と表示され、ヘルスチェックがOKになる"}
     ],
-    trigger:"手順4でnginxが起動しない場合 / 23:30を過ぎても手順3が完了しない場合",
     rollback:[
-      {title:"旧カーネルで起動する", cmd:"(コンソールからGRUBで旧カーネルを選択して起動)"},
-      {title:"サービス起動を確認し、LBへ復帰させる", cmd:"systemctl status nginx --no-pager && lbctl attach web01"}
+      {name:"パッチ適用前に中断する場合", trigger:"手順2の開始前に想定外の状態を検知した場合", steps:[
+        {title:"作業を中断し、LBへweb01を復帰させる", cmd:"lbctl attach web01", expect:"ヘルスチェックがOKになり、振り分けが再開されること"}
+      ]},
+      {name:"パッチ適用後に戻す場合", trigger:"手順4でnginxが起動しない場合 / 23:30を過ぎても手順3が完了しない場合", steps:[
+        {title:"旧カーネルで起動する", cmd:"(コンソールからGRUBで旧カーネルを選択して起動)", expect:"uname -r が作業前に記録したバージョンであること"},
+        {title:"サービス起動を確認し、LBへ復帰させる", cmd:"systemctl status nginx --no-pager && lbctl attach web01", expect:"active (running) かつヘルスチェックOKであること"}
+      ]}
     ],
     verify:[
       {text:"監視ダッシュボードで web01 のアラートがすべて解消していること", cmd:""},
@@ -393,8 +397,8 @@ const metaFields=["title","docid","datetime","system","place","worker","checker"
 function syncFormFromState(){
   metaFields.forEach(k=>$("f-"+k).value=state.meta[k]||"");
   $("f-purpose").value=state.purpose; $("f-scope").value=state.scope; $("f-precond").value=state.precond;
-  $("f-trigger").value=state.trigger; $("f-notes").value=state.notes;
-  buildRows("pre"); buildRows("steps"); buildRows("rollback"); buildRows("verify");
+  $("f-notes").value=state.notes;
+  buildRows("pre"); buildRows("steps"); buildRollbackPlans(); buildRows("verify");
 }
 
 function rowTemplate(kind,item,i,total){
@@ -446,6 +450,57 @@ function moveRow(kind,i,d){
   [arr[i],arr[j]]=[arr[j],arr[i]];buildRows(kind);update();
 }
 
+/* ====== rollback plans ====== */
+const PLAN_LABELS="ABCDEFGHIJ";
+/* 旧形式(trigger + フラットなrollback)を新形式(パターン配列)へ変換 */
+function migrateDoc(d){
+  if(!d)return d;
+  if(Array.isArray(d.rollback)&&(d.rollback.length===0||d.rollback[0].steps===undefined)){
+    const flat=(d.rollback||[]).map(r=>({title:r.title||"",cmd:r.cmd||"",expect:r.expect||""}));
+    d.rollback=(flat.length||(d.trigger||"").trim())?[{name:"",trigger:d.trigger||"",steps:flat}]:[];
+  }
+  delete d.trigger;
+  if(!Array.isArray(d.rollback))d.rollback=[];
+  return d;
+}
+function buildRollbackPlans(){
+  const box=$("rows-rollback");box.innerHTML="";
+  const mk=(l,fn,dis)=>{const b=document.createElement("button");b.textContent=l;b.disabled=!!dis;b.addEventListener("click",fn);return b;};
+  state.rollback.forEach((pl,pi)=>{
+    const wrap=document.createElement("div");wrap.className="row-item";
+    const head=document.createElement("div");head.className="row-head";
+    head.innerHTML=`<span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="spacer"></span>`;
+    head.appendChild(mk("↑",()=>{[state.rollback[pi-1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi-1]];buildRollbackPlans();update();},pi===0));
+    head.appendChild(mk("↓",()=>{[state.rollback[pi+1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi+1]];buildRollbackPlans();update();},pi===state.rollback.length-1));
+    head.appendChild(mk("削除",()=>{if(!confirm("このパターンを削除しますか?"))return;state.rollback.splice(pi,1);buildRollbackPlans();update();}));
+    wrap.appendChild(head);
+    const nameEl=document.createElement("input");nameEl.type="text";nameEl.placeholder="パターン名 (例: パッチ適用前に中断する場合)";nameEl.value=pl.name||"";
+    nameEl.addEventListener("input",()=>{pl.name=nameEl.value;update();});wrap.appendChild(nameEl);
+    const trEl=document.createElement("textarea");trEl.placeholder="発動基準 (観測可能な条件+タイムリミット)";trEl.value=pl.trigger||"";
+    trEl.addEventListener("input",()=>{pl.trigger=trEl.value;update();});wrap.appendChild(trEl);
+    const stepsBox=document.createElement("div");stepsBox.className="rows";stepsBox.style.marginTop="6px";
+    (pl.steps||[]).forEach((s,si)=>{
+      const sw=document.createElement("div");sw.className="row-item";
+      const sh=document.createElement("div");sh.className="row-head";
+      sh.innerHTML=`<span class="no">R${si+1}.</span><span class="spacer"></span>`;
+      sh.appendChild(mk("↑",()=>{[pl.steps[si-1],pl.steps[si]]=[pl.steps[si],pl.steps[si-1]];buildRollbackPlans();update();},si===0));
+      sh.appendChild(mk("↓",()=>{[pl.steps[si+1],pl.steps[si]]=[pl.steps[si],pl.steps[si+1]];buildRollbackPlans();update();},si===pl.steps.length-1));
+      sh.appendChild(mk("削除",()=>{pl.steps.splice(si,1);buildRollbackPlans();update();}));
+      sw.appendChild(sh);
+      const mkIn=(ph,key,mono,area)=>{const el=document.createElement(area?"textarea":"input");if(!area)el.type="text";el.placeholder=ph;el.value=s[key]||"";if(mono)el.classList.add("mono");el.addEventListener("input",()=>{s[key]=el.value;update();});sw.appendChild(el);};
+      mkIn("切り戻し手順の内容","title");
+      mkIn("コマンド / 操作 (任意)","cmd",true,true);
+      mkIn("期待結果 (戻ったと判断できる条件)","expect");
+      stepsBox.appendChild(sw);
+    });
+    wrap.appendChild(stepsBox);
+    const add=document.createElement("button");add.className="addbtn";add.textContent="＋ このパターンに手順を追加";
+    add.addEventListener("click",()=>{pl.steps.push({title:"",cmd:"",expect:""});buildRollbackPlans();update();});
+    wrap.appendChild(add);
+    box.appendChild(wrap);
+  });
+}
+
 /* ====== preview ====== */
 function render(){
   const m=state.meta;
@@ -485,8 +540,11 @@ function render(){
     ${state.steps.length?state.steps.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
 
     <h3>4. 切り戻し手順</h3>
-    ${(state.trigger||"").trim()?`<div class="rollback-trigger"><b>発動基準:</b> ${escBr(state.trigger)}</div>`:""}
-    ${state.rollback.length?state.rollback.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
+    ${state.rollback.length?state.rollback.map((pl,pi)=>`
+      <p class="kv"><b>パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+escBr(pl.name):""}</b></p>
+      ${(pl.trigger||"").trim()?`<div class="rollback-trigger"><b>発動基準:</b> ${escBr(pl.trigger)}</div>`:""}
+      ${(pl.steps||[]).length?pl.steps.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
+    `).join(""):'<p class="empty-hint">— 切り戻しパターンなし —</p>'}
 
     <h3>5. 正常性確認</h3>
     ${state.verify.length?`<ul class="check-list">${li(state.verify)}</ul>`:'<p class="empty-hint">— 項目なし —</p>'}
@@ -531,10 +589,15 @@ function toMarkdown(){
     L.push("");
   });
   L.push("## 4. 切り戻し手順","");
-  if((state.trigger||"").trim())L.push(`> **発動基準**: ${state.trigger}`,"");
-  state.rollback.forEach((s,i)=>{
-    L.push(`### R${i+1}. ${s.title||""}`,"");
-    if((s.cmd||"").trim())L.push("```sh",s.cmd,"```","");
+  state.rollback.forEach((pl,pi)=>{
+    L.push(`### パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+pl.name:""}`,"");
+    if((pl.trigger||"").trim())L.push(`> **発動基準**: ${pl.trigger}`,"");
+    (pl.steps||[]).forEach((s,i)=>{
+      L.push(`#### R${i+1}. ${s.title||""}`,"");
+      if((s.cmd||"").trim())L.push("```sh",s.cmd,"```","");
+      if((s.expect||"").trim())L.push(`**期待結果**: ${s.expect}`,"");
+      L.push("");
+    });
   });
   L.push("## 5. 正常性確認","");
   state.verify.forEach(x=>{
@@ -584,8 +647,7 @@ function seedLib(){
   doc.purpose = swap(doc.purpose); doc.scope = swap(doc.scope);
   doc.pre.forEach(x => x.text = swap(x.text));
   doc.steps.forEach(s => { s.title = swap(s.title); s.cmd = swap(s.cmd); s.expect = swap(s.expect); });
-  doc.trigger = swap(doc.trigger);
-  doc.rollback.forEach(s => { s.title = swap(s.title); s.cmd = swap(s.cmd); });
+  doc.rollback.forEach(pl => { pl.name = swap(pl.name); pl.trigger = swap(pl.trigger); (pl.steps||[]).forEach(s => { s.title = swap(s.title); s.cmd = swap(s.cmd); s.expect = swap(s.expect); }); });
   doc.verify.forEach(x => x.text = swap(x.text));
   LIB.roles.push({
     id: uid(), name: "本番Webサーバ群(サンプル)",
@@ -657,7 +719,7 @@ function generateFromCart(){
   const uniq = a => [...new Set(a.map(s => String(s||"").trim()).filter(Boolean))];
   const normPV = e => typeof e === "string" ? { text: e, cmd: "" } : { text: e.text || "", cmd: e.cmd || "" };
   const uniqPV = a => { const seen = new Set(); return a.filter(x => { const k = x.text + " " + x.cmd; if (!x.text && !x.cmd) return false; if (seen.has(k)) return false; seen.add(k); return true; }); };
-  let pre=[], verify=[], preconds=[], purposes=[], scopes=[], notes=[], steps=[], rollback=[], triggers=[];
+  let pre=[], verify=[], preconds=[], purposes=[], scopes=[], notes=[], steps=[], rollback=[];
   cart.forEach((c, idx) => {
     const r = roleById(c.roleId); if (!r) return;
     const names = c.machines.map(m => m.name);
@@ -673,13 +735,12 @@ function generateFromCart(){
     const p = c.procId ? r.procs.find(x => x.id === c.procId) : null;
     steps.push({ title: `―― 第${idx+1}部: ${r.name}: ${c.opName} ――`, cmd: "", expect: "" });
     if (p) {
-      const d = p.doc;
+      const d = migrateDoc(deepCopy(p.doc));
       if (d.purpose) purposes.push(subAll(d.purpose));
       if (d.scope) scopes.push(subAll(d.scope));
       if (d.precond) preconds.push(subAll(d.precond));
       pre.push(...(d.pre||[]).map(x => ({ text: subAll(x.text), cmd: subAll(x.cmd||"") })));
       verify.push(...(d.verify||[]).map(x => ({ text: subAll(x.text), cmd: subAll(x.cmd||"") })));
-      if (d.trigger) triggers.push(subAll(d.trigger));
       if (d.notes) notes.push(subAll(d.notes));
       const expand = (n) => (d.steps||[]).forEach(s => steps.push({
         title: (n && names.length > 1 ? `【${n}】` : "") + subOne(s.title, n || names.join(", ")),
@@ -687,10 +748,11 @@ function generateFromCart(){
         expect: subOne(s.expect, n || names.join(", "))
       }));
       if (names.length > 1) names.forEach(expand); else expand(names[0] || null);
-      if ((d.rollback||[]).length) {
-        rollback.push({ title: `―― ${c.opName} の切り戻し ――`, cmd: "" });
-        rollback.push(...d.rollback.map(s => ({ title: subAll(s.title), cmd: subAll(s.cmd) })));
-      }
+      (d.rollback||[]).forEach(pl => rollback.push({
+        name: `${c.opName}${(pl.name||"").trim() ? ": " + subAll(pl.name) : ""}`,
+        trigger: subAll(pl.trigger||""),
+        steps: (pl.steps||[]).map(s => ({ title: subAll(s.title), cmd: subAll(s.cmd), expect: subAll(s.expect||"") }))
+      }));
     } else {
       purposes.push(`${c.opName}(手順は新規作成 — この部に記入)`);
     }
@@ -705,7 +767,6 @@ function generateFromCart(){
   state.precond = uniq(preconds).join(" / ");
   state.pre = uniqPV(pre);
   state.steps = steps;
-  state.trigger = uniq(triggers).join(" / ");
   state.rollback = rollback;
   state.verify = uniqPV(verify);
   state.notes = uniq(notes).join("\n");
@@ -799,7 +860,7 @@ function renderLibList(){
   box.querySelectorAll("[data-load]").forEach(b => b.addEventListener("click", () => {
     const [rid, pid] = b.dataset.load.split(":"); const p = roleById(rid).procs.find(x => x.id === pid);
     if (!confirm("マスタ編集モード: この手順をエディタへ読み込みます(現在の編集内容は置き換え)。編集後、同じ役割・作業名で「ライブラリへ保存」すると上書きされます。")) return;
-    state = deepCopy(p.doc);
+    state = migrateDoc(deepCopy(p.doc));
     syncFormFromState(); update();
     $("libOverlay").classList.remove("show");
     toast(`マスタを読み込みました: ${p.opName}({対象}表記のまま編集してください)`);
@@ -815,6 +876,7 @@ $("btnUndoGen").addEventListener("click", () => {
     const u = JSON.parse(localStorage.getItem("tejun-maker-undo"));
     if (!u) return;
     state = Object.assign(emptyState(), u); state.meta = Object.assign(emptyState().meta, u.meta || {});
+    migrateDoc(state);
     syncFormFromState(); update(); $("btnUndoGen").style.display = "none"; toast("生成前の内容に戻しました");
   } catch(e){}
 });
@@ -841,9 +903,10 @@ $("libFileInput").addEventListener("change", e => {
 
 /* ====== wire up ====== */
 metaFields.forEach(k=>$("f-"+k).addEventListener("input",e=>{state.meta[k]=e.target.value;update();}));
-[["f-purpose","purpose"],["f-scope","scope"],["f-precond","precond"],["f-trigger","trigger"],["f-notes","notes"]]
+[["f-purpose","purpose"],["f-scope","scope"],["f-precond","precond"],["f-notes","notes"]]
   .forEach(([id,key])=>$(id).addEventListener("input",e=>{state[key]=e.target.value;update();}));
 document.querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addRow(b.dataset.add)));
+$("btnAddPlan").addEventListener("click",()=>{state.rollback.push({name:"",trigger:"",steps:[{title:"",cmd:"",expect:""}]});buildRollbackPlans();update();});
 
 $("btnSample").addEventListener("click",()=>{state=sampleState();syncFormFromState();update();toast("サンプルを読み込みました");});
 $("btnClear").addEventListener("click",()=>{
@@ -865,6 +928,7 @@ $("fileInput").addEventListener("change",e=>{
     if(!d.meta)throw new Error("形式が不正です");
     state=Object.assign(emptyState(),d);
     state.meta=Object.assign(emptyState().meta,d.meta);
+    migrateDoc(state);
     syncFormFromState();update();toast("JSONを読み込みました");
   }catch(err){toast("読み込みに失敗しました: "+err.message);}};
   r.readAsText(f);e.target.value="";
@@ -891,6 +955,7 @@ $("btnPrint").addEventListener("click",()=>window.print());
   }else{
     state=sampleState();
   }
+  migrateDoc(state);
   syncFormFromState();render();
   seedLib();
   renderGenSelects();
