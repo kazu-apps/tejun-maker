@@ -346,6 +346,7 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
 /* ====== 設定: 販売ページ等のリンク (公開後に差し替え) ====== */
 const LINKS = {
   kit_booth: "https://tejun-lab.booth.pm/items/8602063",
+  kit_pro:   "https://tejun-lab.booth.pm/items/8602854",
   kit_note:  "",   // note記事URL(公開後に設定)
   repo:      "https://github.com/kazu-apps/tejun-maker"
 };
@@ -836,7 +837,7 @@ function download(name,text,type){
 const LS_LIB = "tejun-maker-lib-v1";
 const PRO = false;
 const FREE_LIMITS = { roles: 2, procs: 5 };
-const PRO_NOTE = "無料版は役割2つ・保存5作業まで。Pro版(BOOTH)で無制限+スターターパック付き";
+const PRO_NOTE = "無料版は役割2つ・保存5作業まで。Pro版で無制限+スターターパック付き → https://tejun-lab.booth.pm/items/8602854";
 
 let LIB = { roles: [] };
 try { const l = JSON.parse(localStorage.getItem(LS_LIB)); if (l && Array.isArray(l.roles)) LIB = l; } catch (e) {}
@@ -1214,7 +1215,8 @@ $("btnPrint").addEventListener("click",()=>window.print());
 (function(){
   const box=$("ctaActions");
   const mk=(href,label,cls)=>{const a=document.createElement("a");a.className="btn "+(cls||"");a.href=href;a.target="_blank";a.rel="noopener";a.textContent=label;return a;};
-  if(LINKS.kit_booth)box.appendChild(mk(LINKS.kit_booth,"BOOTHで見る (¥1,980)"));
+  if(LINKS.kit_booth)box.appendChild(mk(LINKS.kit_booth,"テンプレキット (¥1,980)"));
+  if(LINKS.kit_pro)box.appendChild(mk(LINKS.kit_pro,"Pro版ツール (¥2,980)"));
   if(LINKS.kit_note)box.appendChild(mk(LINKS.kit_note,"noteで見る","sub"));
   if(!LINKS.kit_booth&&!LINKS.kit_note){const s=document.createElement("span");s.className="soon";s.textContent="準備中 — 近日公開";box.appendChild(s);}
   if(LINKS.repo)box.appendChild(mk(LINKS.repo,"GitHub","sub"));
