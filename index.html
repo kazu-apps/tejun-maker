@@ -90,6 +90,7 @@ textarea{resize:vertical;min-height:56px}
 .row-head .drag{cursor:grab;color:var(--muted);user-select:none;padding:0 4px;font-size:13px}
 .row-head .drag:active{cursor:grabbing}
 .row-head .rsum{flex:1;min-width:0;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.row-item:not(:hover) .row-head.collapsed button{display:none}
 .card h2 .secTgl{margin-left:auto;padding:1px 8px;font-size:10.5px;letter-spacing:0;text-transform:none}
 .outline{max-height:36vh;overflow-y:auto;font-size:12px;line-height:1.5}
 .outline a{display:block;color:var(--ink);text-decoration:none;padding:1px 6px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
@@ -423,8 +424,8 @@ function rowTemplate(kind,item,i,total){
   const wrap=document.createElement("div"); wrap.className="row-item";
   const open=OPEN.has(item);
   const summary=((kind==="steps"?item.title:item.text)||"").trim()||"(未入力)";
-  const head=document.createElement("div"); head.className="row-head";
-  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="rsum" title="クリックで開閉">${open?"":esc(summary)}</span><span class="spacer"></span>`;
+  const head=document.createElement("div"); head.className="row-head"+(open?"":" collapsed");
+  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="rsum" title="${esc(summary)}">${open?"":esc(summary)}</span><span class="spacer"></span>`;
   const mk=(label,fn,disabled)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!disabled;b.addEventListener("click",fn);return b;};
   const toggle=()=>{open?OPEN.delete(item):OPEN.add(item);buildRows(kind);};
   head.querySelector(".rsum").addEventListener("click",toggle);
@@ -432,7 +433,7 @@ function rowTemplate(kind,item,i,total){
   head.appendChild(mk("↑",()=>moveRow(kind,i,-1),i===0));
   head.appendChild(mk("↓",()=>moveRow(kind,i,1),i===total-1));
   head.appendChild(mk("＋",()=>{const ni=kind==="steps"?{title:"",cmd:"",expect:""}:{text:"",cmd:""};OPEN.add(ni);state[kind].splice(i+1,0,ni);buildRows(kind);update();}));
-  head.appendChild(mk("削除",()=>removeRow(kind,i)));
+  const del=mk("×",()=>removeRow(kind,i)); del.title="削除"; head.appendChild(del);
   wrap.appendChild(head);
   const body=document.createElement("div");
   body.style.cssText="flex-direction:column;gap:6px;display:"+(open?"flex":"none");
@@ -514,14 +515,15 @@ function buildRollbackPlans(){
   state.rollback.forEach((pl,pi)=>{
     const wrap=document.createElement("div");wrap.className="row-item";
     const open=OPEN.has(pl);
-    const head=document.createElement("div");head.className="row-head";
-    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="rsum" title="クリックで開閉">${open?"":esc((pl.name||"").trim()||"(名称未設定)")}</span><span class="spacer"></span>`;
+    const plSum=(pl.name||"").trim()||"(名称未設定)";
+    const head=document.createElement("div");head.className="row-head"+(open?"":" collapsed");
+    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="rsum" title="${esc(plSum)}">${open?"":esc(plSum)}</span><span class="spacer"></span>`;
     const togglePl=()=>{open?OPEN.delete(pl):OPEN.add(pl);buildRollbackPlans();};
     head.querySelector(".rsum").addEventListener("click",togglePl);
     head.appendChild(mk(open?"▾":"▸",togglePl));
     head.appendChild(mk("↑",()=>{[state.rollback[pi-1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi-1]];buildRollbackPlans();update();},pi===0));
     head.appendChild(mk("↓",()=>{[state.rollback[pi+1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi+1]];buildRollbackPlans();update();},pi===state.rollback.length-1));
-    head.appendChild(mk("削除",()=>{if(!confirm("このパターンを削除しますか?"))return;state.rollback.splice(pi,1);buildRollbackPlans();update();}));
+    const delPl=mk("×",()=>{if(!confirm("このパターンを削除しますか?"))return;state.rollback.splice(pi,1);buildRollbackPlans();update();}); delPl.title="パターンを削除"; head.appendChild(delPl);
     wrap.appendChild(head);
     const plBody=document.createElement("div");
     plBody.style.cssText="flex-direction:column;gap:6px;display:"+(open?"flex":"none");
@@ -538,7 +540,7 @@ function buildRollbackPlans(){
       sh.appendChild(mk("↑",()=>{[pl.steps[si-1],pl.steps[si]]=[pl.steps[si],pl.steps[si-1]];buildRollbackPlans();update();},si===0));
       sh.appendChild(mk("↓",()=>{[pl.steps[si+1],pl.steps[si]]=[pl.steps[si],pl.steps[si+1]];buildRollbackPlans();update();},si===pl.steps.length-1));
       sh.appendChild(mk("＋",()=>{pl.steps.splice(si+1,0,{title:"",cmd:"",expect:""});buildRollbackPlans();update();}));
-      sh.appendChild(mk("削除",()=>{pl.steps.splice(si,1);buildRollbackPlans();update();}));
+      const delSt=mk("×",()=>{pl.steps.splice(si,1);buildRollbackPlans();update();}); delSt.title="削除"; sh.appendChild(delSt);
       sw.appendChild(sh);
       const mkIn=(ph,key,mono,area)=>{const el=document.createElement(area?"textarea":"input");if(!area)el.type="text";el.placeholder=ph;el.value=s[key]||"";if(mono)el.classList.add("mono");el.addEventListener("input",()=>{s[key]=el.value;update();});sw.appendChild(el);};
       mkIn("切り戻し手順の内容","title");
