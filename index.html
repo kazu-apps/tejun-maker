@@ -131,6 +131,7 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
 .check-list{list-style:none;padding:0;margin:6px 0}
 .check-list li{padding:5px 0 5px 26px;position:relative;border-bottom:1px dashed var(--line)}
 .check-list li::before{content:"";position:absolute;left:2px;top:9px;width:12px;height:12px;border:1.5px solid var(--ink);border-radius:2px}
+.check-list li pre{background:var(--code-bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin:4px 0 2px;overflow-x:auto;font-size:12px;line-height:1.5}
 .step{border:1px solid var(--line);border-radius:4px;margin:10px 0;overflow:hidden}
 .step-head{display:flex;gap:10px;align-items:baseline;padding:7px 10px;background:var(--indigo-soft)}
 .step-head .n{font-weight:700;color:var(--indigo-deep);font-variant-numeric:tabular-nums}
@@ -357,9 +358,9 @@ function sampleState(){
     scope:"作業中、web01は負荷分散から切り離すためサービス影響なし(冗長構成)。切り離し失敗時は最大5分の断あり。",
     precond:"変更管理承認済み(CHG-1234) / 直近バックアップ取得済み / 関係者へ作業通知済み",
     pre:[
-      {text:"web01へSSHログインできること"},
-      {text:"現在のカーネルバージョンを記録 (uname -r)"},
-      {text:"LBからの切り離し手順が最新であること"}
+      {text:"web01へSSHログインできること", cmd:"ssh web01"},
+      {text:"現在のカーネルバージョンを記録すること", cmd:"uname -r"},
+      {text:"LBからの切り離し手順が最新であること", cmd:""}
     ],
     steps:[
       {title:"LBからweb01を切り離す", cmd:"lbctl detach web01", expect:"detached と表示され、振り分け対象から除外される"},
@@ -374,9 +375,9 @@ function sampleState(){
       {title:"サービス起動を確認し、LBへ復帰させる", cmd:"systemctl status nginx --no-pager && lbctl attach web01"}
     ],
     verify:[
-      {text:"監視ダッシュボードで web01 のアラートがすべて解消していること"},
-      {text:"https://service.example.jp/ が200応答すること"},
-      {text:"エラーログに新規エラーが出ていないこと (直近10分)"}
+      {text:"監視ダッシュボードで web01 のアラートがすべて解消していること", cmd:""},
+      {text:"https://service.example.jp/ が200応答すること", cmd:"curl -s -o /dev/null -w '%{http_code}' https://service.example.jp/"},
+      {text:"エラーログに新規エラーが出ていないこと (直近10分)", cmd:"sudo tail -n 200 /var/log/nginx/error.log"}
     ],
     notes:"エスカレーション先: 運用リーダー 鈴木 (内線1234)。関連: 変更管理票 CHG-1234。"
   };
@@ -423,6 +424,7 @@ function rowTemplate(kind,item,i,total){
     addInput("コマンド / 操作 (任意)","cmd",true,true);
   }else{
     addInput(kind==="pre"?"確認項目 (例: 直近バックアップが取得済みであること)":"確認項目 (例: 監視アラートがすべて解消していること)","text");
+    addInput("確認コマンド (任意)","cmd",true,true);
   }
   return wrap;
 }
@@ -432,7 +434,7 @@ function buildRows(kind){
   arr.forEach((item,i)=>box.appendChild(rowTemplate(kind,item,i,arr.length)));
 }
 function addRow(kind){
-  state[kind].push(kind==="steps"?{title:"",cmd:"",expect:""}:kind==="rollback"?{title:"",cmd:""}:{text:""});
+  state[kind].push(kind==="steps"?{title:"",cmd:"",expect:""}:kind==="rollback"?{title:"",cmd:""}:{text:"",cmd:""});
   buildRows(kind); update();
   const box=$("rows-"+kind); const last=box.lastElementChild&&box.lastElementChild.querySelector("input,textarea");
   if(last)last.focus();
@@ -447,7 +449,7 @@ function moveRow(kind,i,d){
 /* ====== preview ====== */
 function render(){
   const m=state.meta;
-  const li=(arr)=>arr.filter(x=>(x.text||"").trim()).map(x=>`<li>${escBr(x.text)}</li>`).join("");
+  const li=(arr)=>arr.filter(x=>(x.text||"").trim()||(x.cmd||"").trim()).map(x=>`<li>${escBr(x.text)}${(x.cmd||"").trim()?`<pre class="mono">${esc(x.cmd)}</pre>`:""}</li>`).join("");
   const stepHtml=(s,i)=>`
     <div class="step">
       <div class="step-head"><span class="cb"></span><span class="n">${i+1}</span><span class="t">${escBr(s.title)||"(未入力)"}</span></div>
@@ -515,7 +517,11 @@ function toMarkdown(){
   L.push(`- **影響範囲**: ${state.scope||"—"}`);
   L.push(`- **前提条件**: ${state.precond||"—"}`);
   L.push("","## 2. 事前確認","");
-  state.pre.forEach(x=>{if((x.text||"").trim())L.push(`- [ ] ${x.text}`);});
+  state.pre.forEach(x=>{
+    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
+    L.push(`- [ ] ${x.text||""}`);
+    if((x.cmd||"").trim())L.push("","  ```sh","  "+x.cmd.split("\n").join("\n  "),"  ```","");
+  });
   L.push("","## 3. 作業手順","");
   state.steps.forEach((s,i)=>{
     L.push(`### ${i+1}. ${s.title||""}`,"");
@@ -531,7 +537,11 @@ function toMarkdown(){
     if((s.cmd||"").trim())L.push("```sh",s.cmd,"```","");
   });
   L.push("## 5. 正常性確認","");
-  state.verify.forEach(x=>{if((x.text||"").trim())L.push(`- [ ] ${x.text}`);});
+  state.verify.forEach(x=>{
+    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
+    L.push(`- [ ] ${x.text||""}`);
+    if((x.cmd||"").trim())L.push("","  ```sh","  "+x.cmd.split("\n").join("\n  "),"  ```","");
+  });
   L.push("","## 6. 備考・連絡体制","");
   L.push(state.notes||"—");
   L.push("","---","*Generated with 手順書メーカー (tejun-lab)*");
@@ -645,6 +655,8 @@ function generateFromCart(){
   if (!confirm("現在の編集内容を退避して、カートから実施用の手順書を生成します。よろしいですか?")) return;
   try { localStorage.setItem("tejun-maker-undo", JSON.stringify(state)); } catch(e){}
   const uniq = a => [...new Set(a.map(s => String(s||"").trim()).filter(Boolean))];
+  const normPV = e => typeof e === "string" ? { text: e, cmd: "" } : { text: e.text || "", cmd: e.cmd || "" };
+  const uniqPV = a => { const seen = new Set(); return a.filter(x => { const k = x.text + " " + x.cmd; if (!x.text && !x.cmd) return false; if (seen.has(k)) return false; seen.add(k); return true; }); };
   let pre=[], verify=[], preconds=[], purposes=[], scopes=[], notes=[], steps=[], rollback=[], triggers=[];
   cart.forEach((c, idx) => {
     const r = roleById(c.roleId); if (!r) return;
@@ -652,11 +664,12 @@ function generateFromCart(){
     const subAll = s => String(s||"").replace(/\{対象\}/g, names.join(", ") || "{対象}");
     const subOne = (s, n) => String(s||"").replace(/\{対象\}/g, n || "{対象}");
     const parts = r.parts || {};
-    pre.push(...(parts.pre||[]).map(subAll));
-    verify.push(...(parts.verify||[]).map(subAll));
+    const subPV = e => { const n = normPV(e); return { text: subAll(n.text), cmd: subAll(n.cmd) }; };
+    pre.push(...(parts.pre||[]).map(subPV));
+    verify.push(...(parts.verify||[]).map(subPV));
     if (parts.precond) preconds.push(subAll(parts.precond));
     if (parts.notes) notes.push(subAll(parts.notes));
-    c.machines.forEach(m => { if (m.note) pre.push(`【${m.name}固有】${m.note}`); });
+    c.machines.forEach(m => { if (m.note) pre.push({ text: `【${m.name}固有】${m.note}`, cmd: "" }); });
     const p = c.procId ? r.procs.find(x => x.id === c.procId) : null;
     steps.push({ title: `―― 第${idx+1}部: ${r.name}: ${c.opName} ――`, cmd: "", expect: "" });
     if (p) {
@@ -664,8 +677,8 @@ function generateFromCart(){
       if (d.purpose) purposes.push(subAll(d.purpose));
       if (d.scope) scopes.push(subAll(d.scope));
       if (d.precond) preconds.push(subAll(d.precond));
-      pre.push(...(d.pre||[]).map(x => subAll(x.text)));
-      verify.push(...(d.verify||[]).map(x => subAll(x.text)));
+      pre.push(...(d.pre||[]).map(x => ({ text: subAll(x.text), cmd: subAll(x.cmd||"") })));
+      verify.push(...(d.verify||[]).map(x => ({ text: subAll(x.text), cmd: subAll(x.cmd||"") })));
       if (d.trigger) triggers.push(subAll(d.trigger));
       if (d.notes) notes.push(subAll(d.notes));
       const expand = (n) => (d.steps||[]).forEach(s => steps.push({
@@ -690,11 +703,11 @@ function generateFromCart(){
   state.purpose = uniq(purposes).join("\n");
   state.scope = uniq(scopes).join("\n");
   state.precond = uniq(preconds).join(" / ");
-  state.pre = uniq(pre).map(t => ({ text: t }));
+  state.pre = uniqPV(pre);
   state.steps = steps;
   state.trigger = uniq(triggers).join(" / ");
   state.rollback = rollback;
-  state.verify = uniq(verify).map(t => ({ text: t }));
+  state.verify = uniqPV(verify);
   state.notes = uniq(notes).join("\n");
   syncFormFromState(); update();
   $("btnUndoGen").style.display = "";
@@ -729,8 +742,8 @@ function doSaveToLib(){
   else role.procs.push({ id: uid(), opName, doc, updatedAt: new Date().toISOString().slice(0,10) });
   if ($("s-parts").checked) {
     role.parts = {
-      pre: state.pre.map(x => x.text).filter(Boolean),
-      verify: state.verify.map(x => x.text).filter(Boolean),
+      pre: state.pre.filter(x => (x.text||"").trim() || (x.cmd||"").trim()).map(x => ({ text: x.text, cmd: x.cmd || "" })),
+      verify: state.verify.filter(x => (x.text||"").trim() || (x.cmd||"").trim()).map(x => ({ text: x.text, cmd: x.cmd || "" })),
       precond: state.precond, notes: state.notes
     };
   }
