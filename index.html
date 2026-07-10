@@ -92,6 +92,21 @@ textarea{resize:vertical;min-height:56px}
 .addbtn{border-style:dashed;color:var(--muted);width:100%}
 .addbtn:hover{color:var(--indigo-deep)}
 
+/* ---- generator / inventory ---- */
+select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9px;background:var(--bg);color:var(--ink);width:100%}
+.gen-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gen-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.pack-note{font-size:11px;color:var(--muted);margin-top:8px}
+.card.gen{border-left:4px solid var(--hanko)}
+.overlay{position:fixed;inset:0;background:rgba(15,20,28,.55);display:none;align-items:flex-start;justify-content:center;z-index:40;padding:40px 16px}
+.overlay.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:8px;max-width:680px;width:100%;padding:18px 20px;box-shadow:var(--shadow);max-height:82vh;overflow-y:auto}
+.modal h3{margin:0 0 10px;font-size:15px;color:var(--indigo-deep)}
+.inv-table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0}
+.inv-table th,.inv-table td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+.inv-table th{background:var(--indigo-soft);color:var(--indigo-deep)}
+.inv-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+
 /* ---- preview ---- */
 .preview-col{min-width:0}
 .paper{background:var(--paper);border:1px solid var(--line);border-radius:6px;
@@ -172,6 +187,7 @@ textarea{resize:vertical;min-height:56px}
   <div class="actions">
     <button id="btnSample" class="ghost">サンプル</button>
     <button id="btnClear" class="ghost">クリア</button>
+    <button id="btnSaveLib">ライブラリへ保存</button>
     <button id="btnJsonSave">JSON保存</button>
     <button id="btnJsonLoad">JSON読込</button>
     <button id="btnMd">Markdownコピー</button>
@@ -182,6 +198,23 @@ textarea{resize:vertical;min-height:56px}
 
 <div class="wrap">
   <div class="form" id="form">
+
+    <section class="card gen">
+      <h2>ライブラリから作成</h2>
+      <div class="gen-grid">
+        <div class="field"><label>役割(グループ)</label><select id="g-role"></select></div>
+        <div class="field"><label>作業</label><select id="g-proc"></select></div>
+      </div>
+      <div class="field"><label>対象機器</label><div class="gen-actions" id="g-machines" style="margin-top:2px"></div></div>
+      <div class="gen-actions">
+        <button id="btnAddCart" class="primary">＋ カートに積む</button>
+        <button id="btnLib">ライブラリ管理</button>
+        <button id="btnUndoGen" style="display:none">↩ 生成前に戻す</button>
+      </div>
+      <div class="rows" id="cartRows" style="margin-top:10px"></div>
+      <button class="addbtn" id="btnGenerate" style="margin-top:8px">🗎 カートの内容で手順書を生成(1枚に連結)</button>
+      <div class="pack-note">一度書いた手順書を「ライブラリへ保存」しておくと、次からはここで選ぶだけ。複数作業は1枚に連結され、事前確認・正常性確認・連絡体制は重複を除いて統合されます。データはすべてこの端末内のみ。</div>
+    </section>
 
     <section class="card">
       <h2>基本情報</h2>
@@ -252,6 +285,40 @@ textarea{resize:vertical;min-height:56px}
 </div>
 
 <input type="file" id="fileInput" accept=".json" style="display:none">
+<input type="file" id="libFileInput" accept=".json" style="display:none">
+
+<div class="overlay" id="saveOverlay">
+  <div class="modal">
+    <h3>ライブラリへ保存(マスタ登録)</h3>
+    <div class="gen-grid">
+      <div class="field"><label>役割(グループ)</label><select id="s-role"></select></div>
+      <div class="field" id="s-roleNewWrap" style="display:none"><label>新しい役割名</label><input type="text" id="s-roleNew" placeholder="例: 本番Webサーバ群"></div>
+      <div class="field"><label>作業名<span class="req">＊</span></label><input type="text" id="s-opname" placeholder="例: シャットダウン"></div>
+    </div>
+    <div class="field"><label><input type="checkbox" id="s-parts" checked> 事前確認・正常性確認・前提条件・連絡体制を、この役割の<b>標準部品</b>としても保存する(次回、別の作業を書くとき自動で入ります)</label></div>
+    <div class="pack-note">同じ役割・同じ作業名で保存すると上書き=マスタの編集になります。ホスト名の代わりに {対象} と書いておくと、生成時に選んだ機器名へ差し替わります。</div>
+    <div class="gen-actions">
+      <button class="primary" id="s-save">保存する</button>
+      <button id="s-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="libOverlay">
+  <div class="modal">
+    <h3>ライブラリ管理</h3>
+    <div class="field"><input type="text" id="lib-search" placeholder="役割・作業・機器名で検索"></div>
+    <div id="libList"></div>
+    <div class="gen-actions">
+      <button id="lib-export">JSON書き出し(チーム共有用)</button>
+      <button id="lib-import">JSON読み込み</button>
+      <span style="flex:1"></span>
+      <button id="lib-close">閉じる</button>
+    </div>
+    <div class="pack-note" id="libLimitNote"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -485,6 +552,280 @@ function download(name,text,type){
   setTimeout(()=>URL.revokeObjectURL(a.href),3000);
 }
 
+/* ====== library (v2) ====== */
+const LS_LIB = "tejun-maker-lib-v1";
+const PRO = false;
+const FREE_LIMITS = { roles: 2, procs: 5 };
+const PRO_NOTE = "無料版は役割2つ・保存5作業まで。Pro版(BOOTH)で無制限+スターターパック付き";
+
+let LIB = { roles: [] };
+try { const l = JSON.parse(localStorage.getItem(LS_LIB)); if (l && Array.isArray(l.roles)) LIB = l; } catch (e) {}
+function saveLib(){ try { localStorage.setItem(LS_LIB, JSON.stringify(LIB)); } catch(e){ toast("保存領域が一杯です"); } }
+function uid(){ return Math.random().toString(36).slice(2, 10); }
+function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+function roleById(id){ return LIB.roles.find(r => r.id === id); }
+
+/* --- 初回サンプル(空っぽ対策) --- */
+function seedLib(){
+  if (LIB.roles.length || localStorage.getItem(LS_LIB + "-seeded")) return;
+  const doc = sampleState();
+  const swap = s => String(s||"").replace(/web01/g, "{対象}");
+  doc.meta = emptyState().meta;
+  doc.purpose = swap(doc.purpose); doc.scope = swap(doc.scope);
+  doc.pre.forEach(x => x.text = swap(x.text));
+  doc.steps.forEach(s => { s.title = swap(s.title); s.cmd = swap(s.cmd); s.expect = swap(s.expect); });
+  doc.trigger = swap(doc.trigger);
+  doc.rollback.forEach(s => { s.title = swap(s.title); s.cmd = swap(s.cmd); });
+  doc.verify.forEach(x => x.text = swap(x.text));
+  LIB.roles.push({
+    id: uid(), name: "本番Webサーバ群(サンプル)",
+    parts: {
+      pre: doc.pre.map(x => x.text),
+      verify: doc.verify.map(x => x.text),
+      precond: doc.precond,
+      notes: doc.notes
+    },
+    machines: [ { name: "web01", note: "" }, { name: "web02", note: "" } ],
+    procs: [ { id: uid(), opName: "OSセキュリティパッチ適用", doc, updatedAt: new Date().toISOString().slice(0,10) } ]
+  });
+  localStorage.setItem(LS_LIB + "-seeded", "1");
+  saveLib();
+}
+
+/* --- 生成UI --- */
+function renderGenSelects(){
+  const rs = $("g-role"), ps = $("g-proc");
+  rs.innerHTML = LIB.roles.length ? LIB.roles.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("") : `<option value="">(ライブラリが空です)</option>`;
+  renderGenProcs();
+}
+function renderGenProcs(){
+  const r = roleById($("g-role").value); const ps = $("g-proc");
+  if (!r) { ps.innerHTML = `<option value="">—</option>`; $("g-machines").innerHTML = ""; return; }
+  ps.innerHTML = r.procs.map(p => `<option value="${p.id}">${esc(p.opName)}</option>`).join("") +
+    `<option value="__new__">(新規作業 — 標準部品だけ入れて書き始める)</option>`;
+  $("g-machines").innerHTML = r.machines.length
+    ? r.machines.map((m,i) => `<label style="font-size:12.5px"><input type="checkbox" class="g-mc" value="${i}" checked> ${esc(m.name)}</label>`).join("")
+    : `<span class="pack-note" style="margin:0">機器未登録(ライブラリ管理で追加できます)</span>`;
+}
+
+/* --- カート --- */
+let cart = [];
+function renderCart(){
+  const box = $("cartRows"); box.innerHTML = "";
+  cart.forEach((c, i) => {
+    const div = document.createElement("div"); div.className = "row-item";
+    const head = document.createElement("div"); head.className = "row-head";
+    head.innerHTML = `<span class="no">${i+1}.</span><span style="font-size:12.5px;flex:1">${esc(c.roleName)} / <b>${esc(c.opName)}</b> (${esc(c.machines.map(m=>m.name).join(", ") || "対象未指定")})</span>`;
+    const mk = (label, fn, dis) => { const b = document.createElement("button"); b.textContent = label; b.disabled = !!dis; b.addEventListener("click", fn); return b; };
+    head.appendChild(mk("↑", () => { [cart[i-1], cart[i]] = [cart[i], cart[i-1]]; renderCart(); }, i === 0));
+    head.appendChild(mk("↓", () => { [cart[i+1], cart[i]] = [cart[i], cart[i+1]]; renderCart(); }, i === cart.length - 1));
+    head.appendChild(mk("削除", () => { cart.splice(i, 1); renderCart(); }));
+    div.appendChild(head); box.appendChild(div);
+  });
+}
+function addToCart(){
+  const r = roleById($("g-role").value);
+  if (!r) return toast("先にライブラリへ保存するか、役割を作成してください");
+  const pid = $("g-proc").value;
+  let opName, proc = null;
+  if (pid === "__new__") {
+    opName = prompt("新規作業の名前(例: 証明書更新)"); if (!opName) return;
+  } else {
+    proc = r.procs.find(p => p.id === pid); if (!proc) return toast("作業を選択してください");
+    opName = proc.opName;
+  }
+  const machines = [...document.querySelectorAll(".g-mc:checked")].map(cb => r.machines[+cb.value]).filter(Boolean);
+  cart.push({ roleId: r.id, roleName: r.name, opName, procId: proc ? proc.id : null, machines });
+  renderCart(); toast("カートに積みました");
+}
+
+/* --- 生成(実施用コピー) --- */
+function generateFromCart(){
+  if (!cart.length) return toast("先にカートに作業を積んでください");
+  if (!confirm("現在の編集内容を退避して、カートから実施用の手順書を生成します。よろしいですか?")) return;
+  try { localStorage.setItem("tejun-maker-undo", JSON.stringify(state)); } catch(e){}
+  const uniq = a => [...new Set(a.map(s => String(s||"").trim()).filter(Boolean))];
+  let pre=[], verify=[], preconds=[], purposes=[], scopes=[], notes=[], steps=[], rollback=[], triggers=[];
+  cart.forEach((c, idx) => {
+    const r = roleById(c.roleId); if (!r) return;
+    const names = c.machines.map(m => m.name);
+    const subAll = s => String(s||"").replace(/\{対象\}/g, names.join(", ") || "{対象}");
+    const subOne = (s, n) => String(s||"").replace(/\{対象\}/g, n || "{対象}");
+    const parts = r.parts || {};
+    pre.push(...(parts.pre||[]).map(subAll));
+    verify.push(...(parts.verify||[]).map(subAll));
+    if (parts.precond) preconds.push(subAll(parts.precond));
+    if (parts.notes) notes.push(subAll(parts.notes));
+    c.machines.forEach(m => { if (m.note) pre.push(`【${m.name}固有】${m.note}`); });
+    const p = c.procId ? r.procs.find(x => x.id === c.procId) : null;
+    steps.push({ title: `―― 第${idx+1}部: ${r.name}: ${c.opName} ――`, cmd: "", expect: "" });
+    if (p) {
+      const d = p.doc;
+      if (d.purpose) purposes.push(subAll(d.purpose));
+      if (d.scope) scopes.push(subAll(d.scope));
+      if (d.precond) preconds.push(subAll(d.precond));
+      pre.push(...(d.pre||[]).map(x => subAll(x.text)));
+      verify.push(...(d.verify||[]).map(x => subAll(x.text)));
+      if (d.trigger) triggers.push(subAll(d.trigger));
+      if (d.notes) notes.push(subAll(d.notes));
+      const expand = (n) => (d.steps||[]).forEach(s => steps.push({
+        title: (n && names.length > 1 ? `【${n}】` : "") + subOne(s.title, n || names.join(", ")),
+        cmd: subOne(s.cmd, n || names.join(", ")),
+        expect: subOne(s.expect, n || names.join(", "))
+      }));
+      if (names.length > 1) names.forEach(expand); else expand(names[0] || null);
+      if ((d.rollback||[]).length) {
+        rollback.push({ title: `―― ${c.opName} の切り戻し ――`, cmd: "" });
+        rollback.push(...d.rollback.map(s => ({ title: subAll(s.title), cmd: subAll(s.cmd) })));
+      }
+    } else {
+      purposes.push(`${c.opName}(手順は新規作成 — この部に記入)`);
+    }
+  });
+  const today = new Date();
+  state = emptyState();
+  state.meta.title = cart.map(c => `${c.opName}(${c.machines.map(m=>m.name).join("/") || c.roleName})`).join(" + ");
+  state.meta.system = uniq(cart.map(c => c.roleName)).join(", ");
+  state.meta.docid = "OPS-" + today.getFullYear() + String(today.getMonth()+1).padStart(2,"0") + String(today.getDate()).padStart(2,"0") + "-01";
+  state.purpose = uniq(purposes).join("\n");
+  state.scope = uniq(scopes).join("\n");
+  state.precond = uniq(preconds).join(" / ");
+  state.pre = uniq(pre).map(t => ({ text: t }));
+  state.steps = steps;
+  state.trigger = uniq(triggers).join(" / ");
+  state.rollback = rollback;
+  state.verify = uniq(verify).map(t => ({ text: t }));
+  state.notes = uniq(notes).join("\n");
+  syncFormFromState(); update();
+  $("btnUndoGen").style.display = "";
+  toast("実施用の手順書を生成しました(マスタは変更されません)");
+}
+
+/* --- ライブラリへ保存(マスタ登録/編集) --- */
+function openSaveModal(){
+  const sel = $("s-role");
+  sel.innerHTML = LIB.roles.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("") + `<option value="__new__">＋ 新しい役割を作る</option>`;
+  $("s-roleNewWrap").style.display = LIB.roles.length ? "none" : "";
+  if (!LIB.roles.length) sel.value = "__new__", $("s-roleNewWrap").style.display = "";
+  $("s-opname").value = "";
+  $("saveOverlay").classList.add("show");
+}
+function doSaveToLib(){
+  let role;
+  if ($("s-role").value === "__new__") {
+    const name = $("s-roleNew").value.trim(); if (!name) return toast("役割名を入力してください");
+    if (!PRO && LIB.roles.length >= FREE_LIMITS.roles) return alert(PRO_NOTE);
+    role = { id: uid(), name, parts: {}, machines: [], procs: [] };
+    LIB.roles.push(role);
+  } else {
+    role = roleById($("s-role").value); if (!role) return;
+  }
+  const opName = $("s-opname").value.trim(); if (!opName) return toast("作業名を入力してください");
+  const doc = deepCopy(state); doc.meta = emptyState().meta;
+  let proc = role.procs.find(p => p.opName === opName);
+  const total = LIB.roles.reduce((n, r) => n + r.procs.length, 0);
+  if (!proc && !PRO && total >= FREE_LIMITS.procs) return alert(PRO_NOTE);
+  if (proc) { proc.doc = doc; proc.updatedAt = new Date().toISOString().slice(0,10); }
+  else role.procs.push({ id: uid(), opName, doc, updatedAt: new Date().toISOString().slice(0,10) });
+  if ($("s-parts").checked) {
+    role.parts = {
+      pre: state.pre.map(x => x.text).filter(Boolean),
+      verify: state.verify.map(x => x.text).filter(Boolean),
+      precond: state.precond, notes: state.notes
+    };
+  }
+  saveLib(); renderGenSelects();
+  $("saveOverlay").classList.remove("show");
+  toast(`マスタ保存: ${role.name} / ${opName}`);
+}
+
+/* --- ライブラリ管理 --- */
+function renderLibList(){
+  const q = ($("lib-search").value || "").toLowerCase();
+  const hit = s => String(s||"").toLowerCase().includes(q);
+  const box = $("libList"); box.innerHTML = "";
+  LIB.roles.forEach(r => {
+    if (q && !(hit(r.name) || r.procs.some(p => hit(p.opName)) || r.machines.some(m => hit(m.name)))) return;
+    const div = document.createElement("div"); div.className = "row-item";
+    div.innerHTML = `<div class="row-head"><b style="flex:1">${esc(r.name)}</b></div>
+      <div class="pack-note" style="margin:0">機器: ${r.machines.map((m,i)=>`${esc(m.name)} <a href="#" data-delm="${r.id}:${i}">×</a>`).join(" / ") || "なし"}</div>
+      <div class="gen-actions" style="margin-top:4px">
+        <input type="text" data-mname="${r.id}" placeholder="機器名" style="max-width:120px">
+        <input type="text" data-mnote="${r.id}" placeholder="固有メモ(任意)" style="max-width:180px">
+        <button data-madd="${r.id}">機器を追加</button>
+        <button data-delr="${r.id}">役割を削除</button>
+      </div>
+      ${r.procs.map(p => `<div class="row-head" style="border-top:1px dashed var(--line);padding-top:4px">
+        <span style="flex:1;font-size:12.5px">📄 ${esc(p.opName)} <span class="pack-note" style="margin:0">(${p.updatedAt})</span></span>
+        <button data-load="${r.id}:${p.id}">エディタへ読み込む</button>
+        <button data-delp="${r.id}:${p.id}">削除</button>
+      </div>`).join("")}`;
+    box.appendChild(div);
+  });
+  $("libLimitNote").textContent = PRO ? "" : PRO_NOTE + `(現在: 役割${LIB.roles.length}/${FREE_LIMITS.roles}・保存${LIB.roles.reduce((n,r)=>n+r.procs.length,0)}/${FREE_LIMITS.procs})`;
+  box.querySelectorAll("[data-madd]").forEach(b => b.addEventListener("click", () => {
+    const r = roleById(b.dataset.madd);
+    const name = box.querySelector(`[data-mname="${r.id}"]`).value.trim(); if (!name) return;
+    r.machines.push({ name, note: box.querySelector(`[data-mnote="${r.id}"]`).value.trim() });
+    saveLib(); renderLibList(); renderGenSelects();
+  }));
+  box.querySelectorAll("[data-delm]").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault(); const [rid, i] = a.dataset.delm.split(":");
+    roleById(rid).machines.splice(+i, 1); saveLib(); renderLibList(); renderGenSelects();
+  }));
+  box.querySelectorAll("[data-delr]").forEach(b => b.addEventListener("click", () => {
+    const r = roleById(b.dataset.delr);
+    if (!confirm(`役割「${r.name}」を保存済み手順ごと削除します。よろしいですか?`)) return;
+    LIB.roles = LIB.roles.filter(x => x.id !== r.id); saveLib(); renderLibList(); renderGenSelects();
+  }));
+  box.querySelectorAll("[data-delp]").forEach(b => b.addEventListener("click", () => {
+    const [rid, pid] = b.dataset.delp.split(":"); const r = roleById(rid);
+    if (!confirm("この保存済み手順(マスタ)を削除します。よろしいですか?")) return;
+    r.procs = r.procs.filter(p => p.id !== pid); saveLib(); renderLibList(); renderGenSelects();
+  }));
+  box.querySelectorAll("[data-load]").forEach(b => b.addEventListener("click", () => {
+    const [rid, pid] = b.dataset.load.split(":"); const p = roleById(rid).procs.find(x => x.id === pid);
+    if (!confirm("マスタ編集モード: この手順をエディタへ読み込みます(現在の編集内容は置き換え)。編集後、同じ役割・作業名で「ライブラリへ保存」すると上書きされます。")) return;
+    state = deepCopy(p.doc);
+    syncFormFromState(); update();
+    $("libOverlay").classList.remove("show");
+    toast(`マスタを読み込みました: ${p.opName}({対象}表記のまま編集してください)`);
+  }));
+}
+
+/* --- library wire up --- */
+$("g-role").addEventListener("change", renderGenProcs);
+$("btnAddCart").addEventListener("click", addToCart);
+$("btnGenerate").addEventListener("click", generateFromCart);
+$("btnUndoGen").addEventListener("click", () => {
+  try {
+    const u = JSON.parse(localStorage.getItem("tejun-maker-undo"));
+    if (!u) return;
+    state = Object.assign(emptyState(), u); state.meta = Object.assign(emptyState().meta, u.meta || {});
+    syncFormFromState(); update(); $("btnUndoGen").style.display = "none"; toast("生成前の内容に戻しました");
+  } catch(e){}
+});
+$("btnSaveLib").addEventListener("click", openSaveModal);
+$("s-role").addEventListener("change", () => { $("s-roleNewWrap").style.display = $("s-role").value === "__new__" ? "" : "none"; });
+$("s-save").addEventListener("click", doSaveToLib);
+$("s-cancel").addEventListener("click", () => $("saveOverlay").classList.remove("show"));
+$("btnLib").addEventListener("click", () => { renderLibList(); $("libOverlay").classList.add("show"); });
+$("lib-close").addEventListener("click", () => $("libOverlay").classList.remove("show"));
+$("lib-search").addEventListener("input", renderLibList);
+$("lib-export").addEventListener("click", () => { download("tejun-library.json", JSON.stringify(LIB, null, 2), "application/json"); toast("ライブラリを書き出しました"); });
+$("lib-import").addEventListener("click", () => $("libFileInput").click());
+$("libFileInput").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try {
+    const d = JSON.parse(r.result);
+    if (!Array.isArray(d.roles)) throw new Error("形式が不正です");
+    if (!confirm(`読み込むと現在のライブラリ(役割${LIB.roles.length}件)を置き換えます。よろしいですか?`)) return;
+    LIB = d; saveLib(); renderGenSelects(); renderLibList(); toast("ライブラリを読み込みました");
+  } catch(err){ toast("読み込み失敗: " + err.message); } };
+  r.readAsText(f); e.target.value = "";
+});
+
 /* ====== wire up ====== */
 metaFields.forEach(k=>$("f-"+k).addEventListener("input",e=>{state.meta[k]=e.target.value;update();}));
 [["f-purpose","purpose"],["f-scope","scope"],["f-precond","precond"],["f-trigger","trigger"],["f-notes","notes"]]
@@ -538,6 +879,8 @@ $("btnPrint").addEventListener("click",()=>window.print());
     state=sampleState();
   }
   syncFormFromState();render();
+  seedLib();
+  renderGenSelects();
 })();
 </script>
 </body>
