@@ -711,25 +711,37 @@ function toText(){
   const W="=".repeat(64), D="-".repeat(64);
   const L=[];
   const ind=(s,pad)=>String(s||"-").split("\n").map(x=>pad+x).join("\r\n");
-  /* コマンド欄内でシェル状態を追跡し $ / # を付与する。
-     su - や sudo -i の後続行は # 、exit で復帰。別ユーザへのsuやsshは $ のまま。
-     行頭に $ # > ( を自分で書いた場合はそれを尊重する。追跡は同じコマンド欄の中だけ
-     (手順をまたぐと別セッションの可能性があるため、跨ぐ場合は自分で # を書く)。 */
-  const cmdLines=(cmd)=>{
-    const out=[]; const stack=[];
-    const cur=()=>stack.length?stack[stack.length-1]:"$";
+  /* シェル状態($/#)の追跡。su -/sudo -i の後続は #、exit/logout で復帰、別ユーザsu・sshは $。
+     状態は 事前確認→作業手順→正常性確認 を通しで引き継ぐ(同一端末での連続作業を想定)。
+     切り戻しは失敗時点が不定のため各パターン先頭で $ に戻る。
+     行頭に $ / # を自分で書けばそれが優先され、以後の追跡もそこにリセットされる
+     (別ホスト・別セッションへの切替は明示の $ / # で表現する)。 */
+  const makeTracker=()=>{
+    const stack=[];
+    return {
+      cur:()=>stack.length?stack[stack.length-1]:"$",
+      feed:(t)=>{
+        if(/^(sudo\s+)?su(\s+-)?(\s+root)?\s*$/.test(t) || /^sudo\s+(-i|-s|bash|sh)\b/.test(t)) stack.push("#");
+        else if(/^su\s+(-\s+)?\w+/.test(t)) stack.push("$");
+        else if(/^ssh\s+root@/.test(t)) stack.push("#");
+        else if(/^ssh\s/.test(t)) stack.push("$");
+        else if(/^(exit|logout)\s*$/.test(t)) stack.pop();
+      },
+      set:(p)=>{ stack.length=0; if(p==="#") stack.push("#"); }
+    };
+  };
+  const cmdLines=(cmd,trk)=>{
+    const out=[];
     String(cmd||"").split("\n").filter(l=>l.trim()).forEach(l=>{
       const t=l.trim();
-      if(/^[$#>]/.test(t)||/^\(/.test(t)){ out.push("      "+t); return; }
-      out.push("      "+cur()+" "+t);
-      if(/^(sudo\s+)?su(\s+-)?(\s+root)?\s*$/.test(t) || /^sudo\s+(-i|-s|bash|sh)\b/.test(t)) stack.push("#");
-      else if(/^su\s+(-\s+)?\w+/.test(t)) stack.push("$");
-      else if(/^ssh\s+root@/.test(t)) stack.push("#");
-      else if(/^ssh\s/.test(t)) stack.push("$");
-      else if(/^(exit|logout)\s*$/.test(t)) stack.pop();
+      if(/^[$#]/.test(t)){ out.push("      "+t); trk.set(t[0]); return; }
+      if(/^[>(]/.test(t)){ out.push("      "+t); return; }
+      out.push("      "+trk.cur()+" "+t);
+      trk.feed(t);
     });
     return out;
   };
+  const mainTrk=makeTracker();
   L.push(W);
   L.push("  作 業 手 順 書");
   L.push("  "+(m.title||"(無題)"));
@@ -758,7 +770,7 @@ function toText(){
   state.pre.forEach(x=>{
     if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
     L.push("  □ "+(x.text||""));
-    L.push(...cmdLines(x.cmd));
+    L.push(...cmdLines(x.cmd,mainTrk));
     L.push("");
   });
   L.push("■3. 作業手順");
@@ -768,7 +780,7 @@ function toText(){
     if((s.title||"").startsWith("――")){L.push("  "+s.title);L.push("");return;}
     n++;
     L.push(`  □ ${n}. ${s.title||""}  [実施時刻   :   ]`);
-    L.push(...cmdLines(s.cmd));
+    L.push(...cmdLines(s.cmd,mainTrk));
     if((s.expect||"").trim())L.push("      >> "+s.expect);
     L.push("");
   });
@@ -777,18 +789,19 @@ function toText(){
   state.verify.forEach(x=>{
     if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
     L.push("  □ "+(x.text||""));
-    L.push(...cmdLines(x.cmd));
+    L.push(...cmdLines(x.cmd,mainTrk));
     L.push("");
   });
   L.push("■5. 切り戻し手順");
   L.push(D);
   state.rollback.forEach((pl,pi)=>{
+    const rbTrk=makeTracker();
     L.push(`  ▼パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+pl.name:""}`);
     if((pl.trigger||"").trim())L.push("  ※発動基準: "+pl.trigger.split("\n").join("\r\n              "));
     L.push("");
     (pl.steps||[]).forEach((s,i)=>{
       L.push(`  □ R${i+1}. ${s.title||""}`);
-      L.push(...cmdLines(s.cmd));
+      L.push(...cmdLines(s.cmd,rbTrk));
       if((s.expect||"").trim())L.push("      >> "+s.expect);
       L.push("");
     });
