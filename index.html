@@ -89,6 +89,13 @@ textarea{resize:vertical;min-height:56px}
 .row-head .no{font-size:11px;color:var(--muted);min-width:2.2em;font-variant-numeric:tabular-nums}
 .row-head .drag{cursor:grab;color:var(--muted);user-select:none;padding:0 4px;font-size:13px}
 .row-head .drag:active{cursor:grabbing}
+.row-head .rsum{flex:1;min-width:0;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.card h2 .secTgl{margin-left:auto;padding:1px 8px;font-size:10.5px;letter-spacing:0;text-transform:none}
+.outline{max-height:36vh;overflow-y:auto;font-size:12px;line-height:1.5}
+.outline a{display:block;color:var(--ink);text-decoration:none;padding:1px 6px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.outline a:hover{background:var(--indigo-soft)}
+.outline a.osec{font-weight:700;color:var(--indigo-deep);margin-top:4px}
+.outline a.opart{color:var(--hanko);font-size:11px}
 .row-head .spacer{flex:1}
 .row-head button{padding:2px 8px;font-size:11px}
 .addbtn{border-style:dashed;color:var(--muted);width:100%}
@@ -221,6 +228,11 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
       <div class="pack-note">一度書いた手順書を「ライブラリへ保存」しておくと、次からはここで選ぶだけ。複数作業は1枚に連結され、事前確認・正常性確認・連絡体制は重複を除いて統合されます。データはすべてこの端末内のみ。</div>
     </section>
 
+    <section class="card" style="position:sticky;top:56px;z-index:10">
+      <h2>目次(クリックでジャンプ)</h2>
+      <div class="outline" id="outline"></div>
+    </section>
+
     <section class="card">
       <h2>基本情報</h2>
       <div class="field"><label>作業名<span class="req">＊</span></label><input type="text" id="f-title" placeholder="例: Webサーバ01 OSセキュリティパッチ適用作業"></div>
@@ -242,25 +254,25 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
     </section>
 
     <section class="card">
-      <h2>事前確認</h2>
+      <h2>事前確認 <button type="button" class="secTgl" data-sec="pre">開/閉</button></h2>
       <div class="rows" id="rows-pre"></div>
       <button class="addbtn" data-add="pre">＋ 確認項目を追加</button>
     </section>
 
     <section class="card">
-      <h2>作業手順</h2>
+      <h2>作業手順 <button type="button" class="secTgl" data-sec="steps">開/閉</button></h2>
       <div class="rows" id="rows-steps"></div>
       <button class="addbtn" data-add="steps">＋ 手順を追加</button>
     </section>
 
     <section class="card">
-      <h2>正常性確認</h2>
+      <h2>正常性確認 <button type="button" class="secTgl" data-sec="verify">開/閉</button></h2>
       <div class="rows" id="rows-verify"></div>
       <button class="addbtn" data-add="verify">＋ 確認項目を追加</button>
     </section>
 
     <section class="card">
-      <h2>切り戻し</h2>
+      <h2>切り戻し <button type="button" class="secTgl" data-sec="rollback">開/閉</button></h2>
       <div class="rows" id="rows-rollback"></div>
       <button class="addbtn" id="btnAddPlan">＋ 切り戻しパターンを追加</button>
       <div class="pack-note">失敗する箇所で戻し方は変わります。「適用前に中断する場合」「適用後に戻す場合」のように、パターンごとに発動基準と手順を分けて書けます。</div>
@@ -405,16 +417,26 @@ function syncFormFromState(){
   buildRows("pre"); buildRows("steps"); buildRollbackPlans(); buildRows("verify");
 }
 
+/* 開いている行の記憶(永続化しない・オブジェクト参照ベース) */
+const OPEN=new WeakSet();
 function rowTemplate(kind,item,i,total){
   const wrap=document.createElement("div"); wrap.className="row-item";
+  const open=OPEN.has(item);
+  const summary=((kind==="steps"?item.title:item.text)||"").trim()||"(未入力)";
   const head=document.createElement("div"); head.className="row-head";
-  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="spacer"></span>`;
+  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="rsum" title="クリックで開閉">${open?"":esc(summary)}</span><span class="spacer"></span>`;
   const mk=(label,fn,disabled)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!disabled;b.addEventListener("click",fn);return b;};
+  const toggle=()=>{open?OPEN.delete(item):OPEN.add(item);buildRows(kind);};
+  head.querySelector(".rsum").addEventListener("click",toggle);
+  head.appendChild(mk(open?"▾":"▸",toggle));
   head.appendChild(mk("↑",()=>moveRow(kind,i,-1),i===0));
   head.appendChild(mk("↓",()=>moveRow(kind,i,1),i===total-1));
-  head.appendChild(mk("＋",()=>{state[kind].splice(i+1,0,kind==="steps"?{title:"",cmd:"",expect:""}:{text:"",cmd:""});buildRows(kind);update();}));
+  head.appendChild(mk("＋",()=>{const ni=kind==="steps"?{title:"",cmd:"",expect:""}:{text:"",cmd:""};OPEN.add(ni);state[kind].splice(i+1,0,ni);buildRows(kind);update();}));
   head.appendChild(mk("削除",()=>removeRow(kind,i)));
   wrap.appendChild(head);
+  const body=document.createElement("div");
+  body.style.cssText="flex-direction:column;gap:6px;display:"+(open?"flex":"none");
+  wrap.appendChild(body);
 
   const addInput=(ph,key,mono,isArea)=>{
     const el=document.createElement(isArea?"textarea":"input");
@@ -422,7 +444,7 @@ function rowTemplate(kind,item,i,total){
     el.placeholder=ph; el.value=item[key]||"";
     if(mono)el.classList.add("mono");
     el.addEventListener("input",()=>{item[key]=el.value;update();});
-    wrap.appendChild(el);
+    body.appendChild(el);
   };
   if(kind==="steps"){
     addInput("手順の内容 (例: LBからweb01を切り離す)","title");
@@ -460,7 +482,8 @@ function enableDrag(container,getArr,rebuild){
   });
 }
 function addRow(kind){
-  state[kind].push(kind==="steps"?{title:"",cmd:"",expect:""}:kind==="rollback"?{title:"",cmd:""}:{text:"",cmd:""});
+  const ni=kind==="steps"?{title:"",cmd:"",expect:""}:{text:"",cmd:""};
+  OPEN.add(ni); state[kind].push(ni);
   buildRows(kind); update();
   const box=$("rows-"+kind); const last=box.lastElementChild&&box.lastElementChild.querySelector("input,textarea");
   if(last)last.focus();
@@ -490,16 +513,23 @@ function buildRollbackPlans(){
   const mk=(l,fn,dis)=>{const b=document.createElement("button");b.textContent=l;b.disabled=!!dis;b.addEventListener("click",fn);return b;};
   state.rollback.forEach((pl,pi)=>{
     const wrap=document.createElement("div");wrap.className="row-item";
+    const open=OPEN.has(pl);
     const head=document.createElement("div");head.className="row-head";
-    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="spacer"></span>`;
+    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="rsum" title="クリックで開閉">${open?"":esc((pl.name||"").trim()||"(名称未設定)")}</span><span class="spacer"></span>`;
+    const togglePl=()=>{open?OPEN.delete(pl):OPEN.add(pl);buildRollbackPlans();};
+    head.querySelector(".rsum").addEventListener("click",togglePl);
+    head.appendChild(mk(open?"▾":"▸",togglePl));
     head.appendChild(mk("↑",()=>{[state.rollback[pi-1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi-1]];buildRollbackPlans();update();},pi===0));
     head.appendChild(mk("↓",()=>{[state.rollback[pi+1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi+1]];buildRollbackPlans();update();},pi===state.rollback.length-1));
     head.appendChild(mk("削除",()=>{if(!confirm("このパターンを削除しますか?"))return;state.rollback.splice(pi,1);buildRollbackPlans();update();}));
     wrap.appendChild(head);
+    const plBody=document.createElement("div");
+    plBody.style.cssText="flex-direction:column;gap:6px;display:"+(open?"flex":"none");
+    wrap.appendChild(plBody);
     const nameEl=document.createElement("input");nameEl.type="text";nameEl.placeholder="パターン名 (例: パッチ適用前に中断する場合)";nameEl.value=pl.name||"";
-    nameEl.addEventListener("input",()=>{pl.name=nameEl.value;update();});wrap.appendChild(nameEl);
+    nameEl.addEventListener("input",()=>{pl.name=nameEl.value;update();});plBody.appendChild(nameEl);
     const trEl=document.createElement("textarea");trEl.placeholder="発動基準 (観測可能な条件+タイムリミット)";trEl.value=pl.trigger||"";
-    trEl.addEventListener("input",()=>{pl.trigger=trEl.value;update();});wrap.appendChild(trEl);
+    trEl.addEventListener("input",()=>{pl.trigger=trEl.value;update();});plBody.appendChild(trEl);
     const stepsBox=document.createElement("div");stepsBox.className="rows";stepsBox.style.marginTop="6px";
     (pl.steps||[]).forEach((s,si)=>{
       const sw=document.createElement("div");sw.className="row-item";
@@ -516,14 +546,51 @@ function buildRollbackPlans(){
       mkIn("期待結果 (戻ったと判断できる条件)","expect");
       stepsBox.appendChild(sw);
     });
-    wrap.appendChild(stepsBox);
+    plBody.appendChild(stepsBox);
     enableDrag(stepsBox,()=>pl.steps,buildRollbackPlans);
     const add=document.createElement("button");add.className="addbtn";add.textContent="＋ このパターンに手順を追加";
     add.addEventListener("click",()=>{pl.steps.push({title:"",cmd:"",expect:""});buildRollbackPlans();update();});
-    wrap.appendChild(add);
+    plBody.appendChild(add);
     box.appendChild(wrap);
   });
   enableDrag(box,()=>state.rollback,buildRollbackPlans);
+}
+
+/* ====== outline (目次ナビ) ====== */
+function renderOutline(){
+  const el=$("outline"); if(!el)return;
+  let h="";
+  h+=`<a class="osec" data-card="rows-pre">2. 事前確認 (${state.pre.length})</a>`;
+  h+=`<a class="osec" data-card="rows-steps">3. 作業手順 (${state.steps.filter(s=>!(s.title||"").startsWith("――")).length})</a>`;
+  let n=0;
+  state.steps.forEach((s,i)=>{
+    const part=(s.title||"").startsWith("――");
+    const t=part?(s.title||""):`${++n}. ${(s.title||"").trim()||"(未入力)"}`;
+    h+=`<a data-kind="steps" data-i="${i}" class="${part?"opart":""}">${esc(t)}</a>`;
+  });
+  h+=`<a class="osec" data-card="rows-verify">4. 正常性確認 (${state.verify.length})</a>`;
+  h+=`<a class="osec" data-card="rows-rollback">5. 切り戻し (${state.rollback.length}パターン)</a>`;
+  state.rollback.forEach((pl,i)=>{
+    h+=`<a data-kind="rollback" data-i="${i}">パターン${PLAN_LABELS[i]||i+1}${(pl.name||"").trim()?": "+esc(pl.name):""}</a>`;
+  });
+  el.innerHTML=h;
+  el.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{
+    if(a.dataset.card){
+      const t=$(a.dataset.card);
+      if(t)t.closest(".card").scrollIntoView({behavior:"smooth",block:"start"});
+      return;
+    }
+    const kind=a.dataset.kind, i=+a.dataset.i;
+    if(kind==="steps"){
+      OPEN.add(state.steps[i]); buildRows("steps");
+      const r=$("rows-steps").children[i];
+      if(r)r.scrollIntoView({behavior:"smooth",block:"center"});
+    }else{
+      OPEN.add(state.rollback[i]); buildRollbackPlans();
+      const r=$("rows-rollback").children[i];
+      if(r)r.scrollIntoView({behavior:"smooth",block:"center"});
+    }
+  }));
 }
 
 /* ====== preview ====== */
@@ -580,6 +647,7 @@ function render(){
     <div class="doc-footer"><span>${esc(m.docid)}</span><span>Generated with 手順書メーカー (tejun-lab)</span></div>
   `;
   $("doc").innerHTML=html;
+  renderOutline();
 }
 
 /* ====== markdown ====== */
@@ -1029,7 +1097,15 @@ metaFields.forEach(k=>$("f-"+k).addEventListener("input",e=>{state.meta[k]=e.tar
 [["f-purpose","purpose"],["f-scope","scope"],["f-precond","precond"],["f-notes","notes"]]
   .forEach(([id,key])=>$(id).addEventListener("input",e=>{state[key]=e.target.value;update();}));
 document.querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addRow(b.dataset.add)));
-$("btnAddPlan").addEventListener("click",()=>{state.rollback.push({name:"",trigger:"",steps:[{title:"",cmd:"",expect:""}]});buildRollbackPlans();update();});
+$("btnAddPlan").addEventListener("click",()=>{const np={name:"",trigger:"",steps:[{title:"",cmd:"",expect:""}]};OPEN.add(np);state.rollback.push(np);buildRollbackPlans();update();});
+document.querySelectorAll(".secTgl").forEach(b=>b.addEventListener("click",e=>{
+  e.stopPropagation();
+  const kind=b.dataset.sec;
+  const arr=state[kind]||[];
+  const anyOpen=arr.some(x=>OPEN.has(x));
+  arr.forEach(x=>{anyOpen?OPEN.delete(x):OPEN.add(x);});
+  kind==="rollback"?buildRollbackPlans():buildRows(kind);
+}));
 
 $("btnSample").addEventListener("click",()=>{state=sampleState();syncFormFromState();update();toast("サンプルを読み込みました");});
 $("btnClear").addEventListener("click",()=>{
