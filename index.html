@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手順書メーカー | ブラウザ完結・無料の作業手順書作成ツール</title>
+<meta name="description" content="インフラ・IT運用エンジニアのための無料手順書ジェネレータ。事前確認・作業手順・切り戻し・正常性確認まで、実務品質の作業手順書をブラウザだけで作成。データは端末外に送信されません。">
+<meta property="og:title" content="手順書メーカー | 無料の作業手順書作成ツール">
+<meta property="og:description" content="実務品質の作業手順書をブラウザだけで。Markdown出力・印刷対応・完全ローカル処理。">
+<meta property="og:type" content="website">
+</head>
+<body>
+<style>
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#1e2733; --muted:#5c6b7a;
+  --line:#d5dce3; --indigo:#2f4f77; --indigo-deep:#223a58; --indigo-soft:#e3eaf2;
+  --hanko:#c4423b; --ok:#2f7d5d; --code-bg:#f0f3f6; --paper:#ffffff;
+  --shadow:0 1px 3px rgba(30,39,51,.08),0 8px 24px rgba(30,39,51,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12161c; --panel:#1a2028; --ink:#e5eaf0; --muted:#8fa0b0;
+    --line:#303a46; --indigo:#7ba2cf; --indigo-deep:#a9c4e4; --indigo-soft:#243447;
+    --hanko:#d76762; --ok:#5cb591; --code-bg:#0e1319; --paper:#1e242d;
+    --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    --btn-ink:#12161c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a2028; --ink:#e5eaf0; --muted:#8fa0b0;
+  --line:#303a46; --indigo:#7ba2cf; --indigo-deep:#a9c4e4; --indigo-soft:#243447;
+  --hanko:#d76762; --ok:#5cb591; --code-bg:#0e1319; --paper:#1e242d;
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --btn-ink:#12161c;
+}
+:root[data-theme="light"]{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#1e2733; --muted:#5c6b7a;
+  --line:#d5dce3; --indigo:#2f4f77; --indigo-deep:#223a58; --indigo-soft:#e3eaf2;
+  --hanko:#c4423b; --ok:#2f7d5d; --code-bg:#f0f3f6; --paper:#ffffff;
+  --shadow:0 1px 3px rgba(30,39,51,.08),0 8px 24px rgba(30,39,51,.07);
+  --btn-ink:#ffffff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Noto Sans JP",Meiryo,sans-serif;
+  font-size:14px;line-height:1.65}
+.mono{font-family:Consolas,"SF Mono",Menlo,monospace}
+
+/* ---- header ---- */
+.topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:12px 20px;background:var(--panel);border-bottom:2px solid var(--indigo);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{margin:0;font-size:18px;letter-spacing:.06em;color:var(--indigo-deep)}
+.brand .tag{font-size:11.5px;color:var(--muted)}
+.topbar .actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:4px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);padding:6px 12px;font-size:12.5px}
+button:hover{border-color:var(--indigo);color:var(--indigo-deep)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--indigo);outline-offset:1px}
+button.primary{background:var(--indigo);border-color:var(--indigo);color:var(--btn-ink,#fff)}
+button.primary:hover{opacity:.9;color:var(--btn-ink,#fff)}
+button.ghost{background:transparent}
+
+/* ---- layout ---- */
+.wrap{display:grid;grid-template-columns:minmax(340px,420px) 1fr;gap:18px;
+  padding:18px 20px 40px;max-width:1400px;margin:0 auto}
+@media (max-width:960px){.wrap{grid-template-columns:1fr}}
+
+/* ---- form ---- */
+.form{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 10px;font-size:12px;letter-spacing:.14em;color:var(--indigo-deep);
+  text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.card h2::before{content:"";width:8px;height:8px;background:var(--indigo);display:inline-block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.field label{font-size:11.5px;color:var(--muted)}
+.field label .req{color:var(--hanko);margin-left:2px}
+input[type=text],textarea{font:inherit;border:1px solid var(--line);border-radius:4px;
+  padding:7px 9px;background:var(--bg);color:var(--ink);width:100%}
+textarea{resize:vertical;min-height:56px}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row-item{border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--bg);
+  display:flex;flex-direction:column;gap:6px}
+.row-head{display:flex;align-items:center;gap:6px}
+.row-head .no{font-size:11px;color:var(--muted);min-width:2.2em;font-variant-numeric:tabular-nums}
+.row-head .spacer{flex:1}
+.row-head button{padding:2px 8px;font-size:11px}
+.addbtn{border-style:dashed;color:var(--muted);width:100%}
+.addbtn:hover{color:var(--indigo-deep)}
+
+/* ---- preview ---- */
+.preview-col{min-width:0}
+.paper{background:var(--paper);border:1px solid var(--line);border-radius:6px;
+  box-shadow:var(--shadow);padding:36px 44px;max-width:860px;margin:0 auto}
+@media (max-width:640px){.paper{padding:20px 16px}}
+.doc-title{font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;
+  font-size:24px;text-align:center;margin:0 0 4px;letter-spacing:.12em;text-wrap:balance}
+.doc-sub{text-align:center;color:var(--muted);font-size:12px;margin:0 0 18px}
+.meta-table{width:100%;border-collapse:collapse;margin-bottom:6px;font-size:12.5px}
+.meta-table th,.meta-table td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+.meta-table th{background:var(--indigo-soft);font-weight:600;white-space:nowrap;width:7em;color:var(--indigo-deep)}
+.stamp-row{display:flex;justify-content:flex-end;gap:0;margin:10px 0 18px}
+.stamp{width:74px;border:1px solid var(--line);text-align:center;font-size:11px}
+.stamp .s-label{border-bottom:1px solid var(--line);background:var(--indigo-soft);padding:2px 0;color:var(--indigo-deep)}
+.stamp .s-box{height:58px;display:flex;align-items:center;justify-content:center;color:var(--line)}
+.stamp .s-box span{width:34px;height:34px;border:1.5px dashed var(--hanko);border-radius:50%;opacity:.35}
+.doc h3{font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;
+  font-size:16px;border-bottom:2px solid var(--indigo);padding-bottom:4px;margin:26px 0 10px;letter-spacing:.05em}
+.doc p{margin:6px 0}
+.doc .kv{margin:2px 0}
+.doc .kv b{color:var(--indigo-deep)}
+.check-list{list-style:none;padding:0;margin:6px 0}
+.check-list li{padding:5px 0 5px 26px;position:relative;border-bottom:1px dashed var(--line)}
+.check-list li::before{content:"";position:absolute;left:2px;top:9px;width:12px;height:12px;border:1.5px solid var(--ink);border-radius:2px}
+.step{border:1px solid var(--line);border-radius:4px;margin:10px 0;overflow:hidden}
+.step-head{display:flex;gap:10px;align-items:baseline;padding:7px 10px;background:var(--indigo-soft)}
+.step-head .n{font-weight:700;color:var(--indigo-deep);font-variant-numeric:tabular-nums}
+.step-head .t{font-weight:600;flex:1}
+.step-head .cb{width:13px;height:13px;border:1.5px solid var(--ink);border-radius:2px;align-self:center;flex:none}
+.step-body{padding:8px 10px}
+.step-body pre{background:var(--code-bg);border:1px solid var(--line);border-radius:4px;
+  padding:8px 10px;margin:6px 0;overflow-x:auto;font-size:12.5px;line-height:1.5}
+.step-body .expect{font-size:12.5px;color:var(--muted)}
+.step-body .expect b{color:var(--ok)}
+.rollback-trigger{border-left:3px solid var(--hanko);padding:6px 10px;background:var(--code-bg);margin:8px 0}
+.doc-footer{margin-top:30px;padding-top:8px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted)}
+.empty-hint{color:var(--muted);font-size:12.5px;font-style:normal}
+
+/* ---- CTA ---- */
+.cta{max-width:860px;margin:20px auto 0;border:1px solid var(--line);border-left:4px solid var(--hanko);
+  border-radius:6px;background:var(--panel);padding:16px 20px;box-shadow:var(--shadow)}
+.cta h2{margin:0 0 6px;font-size:15px}
+.cta p{margin:4px 0;font-size:13px;color:var(--muted)}
+.cta .cta-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.cta a.btn{display:inline-block;text-decoration:none;background:var(--hanko);color:#fff;
+  border-radius:4px;padding:8px 16px;font-size:13px}
+.cta a.btn.sub{background:transparent;color:var(--indigo-deep);border:1px solid var(--line)}
+.cta .soon{display:inline-block;background:var(--code-bg);color:var(--muted);border:1px dashed var(--line);border-radius:4px;padding:8px 16px;font-size:13px}
+
+.privacy{max-width:860px;margin:14px auto 0;font-size:11.5px;color:var(--muted);text-align:center}
+.privacy b{color:var(--ok)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--indigo-deep);color:var(--bg);padding:9px 18px;border-radius:4px;
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50}
+:root[data-theme="dark"] .toast{color:#12161c}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+
+/* ---- print ---- */
+@media print{
+  body{background:#fff;color:#111;font-size:12px}
+  .topbar,.form,.cta,.privacy,.toast{display:none!important}
+  .wrap{display:block;padding:0;max-width:none}
+  .paper{border:none;box-shadow:none;padding:0;max-width:none}
+  .doc h3{border-color:#2f4f77}
+  .step-head{background:#eef2f7!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .meta-table th,.stamp .s-label{background:#eef2f7!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .step{break-inside:avoid}
+}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>手順書メーカー</h1>
+    <span class="tag">実務品質の作業手順書を、ブラウザだけで。</span>
+  </div>
+  <div class="actions">
+    <button id="btnSample" class="ghost">サンプル</button>
+    <button id="btnClear" class="ghost">クリア</button>
+    <button id="btnJsonSave">JSON保存</button>
+    <button id="btnJsonLoad">JSON読込</button>
+    <button id="btnMd">Markdownコピー</button>
+    <button id="btnMdDl">.mdダウンロード</button>
+    <button id="btnPrint" class="primary">印刷 / PDF</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="form" id="form">
+
+    <section class="card">
+      <h2>基本情報</h2>
+      <div class="field"><label>作業名<span class="req">＊</span></label><input type="text" id="f-title" placeholder="例: Webサーバ01 OSセキュリティパッチ適用作業"></div>
+      <div class="grid2">
+        <div class="field"><label>文書番号</label><input type="text" id="f-docid" placeholder="例: OPS-2026-0710"></div>
+        <div class="field"><label>作業日時</label><input type="text" id="f-datetime" placeholder="例: 2026/07/15 22:00–24:00"></div>
+        <div class="field"><label>対象システム</label><input type="text" id="f-system" placeholder="例: 本番Web基盤 (web01)"></div>
+        <div class="field"><label>作業場所</label><input type="text" id="f-place" placeholder="例: リモート (踏み台経由)"></div>
+        <div class="field"><label>作業者</label><input type="text" id="f-worker" placeholder="例: 山田"></div>
+        <div class="field"><label>確認者</label><input type="text" id="f-checker" placeholder="例: 佐藤"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>作業概要</h2>
+      <div class="field"><label>目的<span class="req">＊</span></label><textarea id="f-purpose" placeholder="なぜこの作業を行うのか"></textarea></div>
+      <div class="field"><label>影響範囲</label><textarea id="f-scope" placeholder="サービス影響の有無、影響するユーザ・システム"></textarea></div>
+      <div class="field"><label>前提条件</label><textarea id="f-precond" placeholder="作業前に満たしているべき条件 (承認取得済み、バックアップ取得済み 等)"></textarea></div>
+    </section>
+
+    <section class="card">
+      <h2>事前確認</h2>
+      <div class="rows" id="rows-pre"></div>
+      <button class="addbtn" data-add="pre">＋ 確認項目を追加</button>
+    </section>
+
+    <section class="card">
+      <h2>作業手順</h2>
+      <div class="rows" id="rows-steps"></div>
+      <button class="addbtn" data-add="steps">＋ 手順を追加</button>
+    </section>
+
+    <section class="card">
+      <h2>切り戻し</h2>
+      <div class="field"><label>切り戻し発動基準</label><textarea id="f-trigger" placeholder="例: 手順5完了時点でサービス正常性が確認できない場合、22:45を過ぎても手順3が完了しない場合"></textarea></div>
+      <div class="rows" id="rows-rollback"></div>
+      <button class="addbtn" data-add="rollback">＋ 切り戻し手順を追加</button>
+    </section>
+
+    <section class="card">
+      <h2>正常性確認</h2>
+      <div class="rows" id="rows-verify"></div>
+      <button class="addbtn" data-add="verify">＋ 確認項目を追加</button>
+    </section>
+
+    <section class="card">
+      <h2>備考・連絡体制</h2>
+      <div class="field"><textarea id="f-notes" placeholder="エスカレーション先、関連ドキュメント、注意事項など"></textarea></div>
+    </section>
+  </div>
+
+  <div class="preview-col">
+    <div class="paper"><div class="doc" id="doc"></div></div>
+
+    <div class="cta">
+      <h2>もっと本格的なテンプレートが必要な方へ</h2>
+      <p>障害対応記録・切り戻し計画・Wチェック観点50項目・AIプロンプト20本を収録した<br>
+      <b>「インフラ/IT運用 実務ドキュメントキット」</b>を販売しています。</p>
+      <div class="cta-actions" id="ctaActions"></div>
+    </div>
+
+    <div class="privacy">
+      🔒 入力データは<b>すべてブラウザ内で処理</b>され、サーバには一切送信されません(自動保存は端末のlocalStorageのみ)。<br>
+      © 2026 手順ラボ (Tejun Lab)
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json" style="display:none">
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ====== 設定: 販売ページ等のリンク (公開後に差し替え) ====== */
+const LINKS = {
+  kit_booth: "",   // BOOTH商品ページURL
+  kit_note:  "",   // note記事URL
+  repo:      "https://github.com/kazu-apps/tejun-maker"
+};
+
+const LS_KEY = "tejun-maker-v1";
+const $ = (id) => document.getElementById(id);
+
+let state = emptyState();
+
+function emptyState(){
+  return {
+    meta:{title:"",docid:"",datetime:"",system:"",place:"",worker:"",checker:""},
+    purpose:"",scope:"",precond:"",
+    pre:[], steps:[], trigger:"", rollback:[], verify:[], notes:""
+  };
+}
+
+function sampleState(){
+  return {
+    meta:{
+      title:"Webサーバ01 OSセキュリティパッチ適用作業",
+      docid:"OPS-2026-0710-01",
+      datetime:"2026/07/15 (水) 22:00–24:00",
+      system:"本番Web基盤 web01 (Rocky Linux 9)",
+      place:"リモート (踏み台 bastion01 経由)",
+      worker:"山田",checker:"佐藤"
+    },
+    purpose:"CVE対応のためOSセキュリティパッチを適用し、既知脆弱性を解消する。",
+    scope:"作業中、web01は負荷分散から切り離すためサービス影響なし(冗長構成)。切り離し失敗時は最大5分の断あり。",
+    precond:"変更管理承認済み(CHG-1234) / 直近バックアップ取得済み / 関係者へ作業通知済み",
+    pre:[
+      {text:"web01へSSHログインできること"},
+      {text:"現在のカーネルバージョンを記録 (uname -r)"},
+      {text:"LBからの切り離し手順が最新であること"}
+    ],
+    steps:[
+      {title:"LBからweb01を切り離す", cmd:"lbctl detach web01", expect:"detached と表示され、振り分け対象から除外される"},
+      {title:"パッチを適用する", cmd:"sudo dnf update --security -y", expect:"Complete! が表示され、エラーが出力されないこと"},
+      {title:"OSを再起動する", cmd:"sudo systemctl reboot", expect:"3分以内にSSH再接続できること"},
+      {title:"サービス起動を確認する", cmd:"systemctl status nginx --no-pager", expect:"active (running) であること"},
+      {title:"LBへweb01を復帰させる", cmd:"lbctl attach web01", expect:"attached と表示され、ヘルスチェックがOKになる"}
+    ],
+    trigger:"手順4でnginxが起動しない場合 / 23:30を過ぎても手順3が完了しない場合",
+    rollback:[
+      {title:"旧カーネルで起動する", cmd:"(コンソールからGRUBで旧カーネルを選択して起動)"},
+      {title:"サービス起動を確認し、LBへ復帰させる", cmd:"systemctl status nginx --no-pager && lbctl attach web01"}
+    ],
+    verify:[
+      {text:"監視ダッシュボードで web01 のアラートがすべて解消していること"},
+      {text:"https://service.example.jp/ が200応答すること"},
+      {text:"エラーログに新規エラーが出ていないこと (直近10分)"}
+    ],
+    notes:"エスカレーション先: 運用リーダー 鈴木 (内線1234)。関連: 変更管理票 CHG-1234。"
+  };
+}
+
+/* ====== util ====== */
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function escBr(s){return esc(s).replace(/\n/g,"<br>");}
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),1800);}
+
+/* ====== form <-> state ====== */
+const metaFields=["title","docid","datetime","system","place","worker","checker"];
+function syncFormFromState(){
+  metaFields.forEach(k=>$("f-"+k).value=state.meta[k]||"");
+  $("f-purpose").value=state.purpose; $("f-scope").value=state.scope; $("f-precond").value=state.precond;
+  $("f-trigger").value=state.trigger; $("f-notes").value=state.notes;
+  buildRows("pre"); buildRows("steps"); buildRows("rollback"); buildRows("verify");
+}
+
+function rowTemplate(kind,item,i,total){
+  const wrap=document.createElement("div"); wrap.className="row-item";
+  const head=document.createElement("div"); head.className="row-head";
+  head.innerHTML=`<span class="no">${i+1}.</span><span class="spacer"></span>`;
+  const mk=(label,fn,disabled)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!disabled;b.addEventListener("click",fn);return b;};
+  head.appendChild(mk("↑",()=>moveRow(kind,i,-1),i===0));
+  head.appendChild(mk("↓",()=>moveRow(kind,i,1),i===total-1));
+  head.appendChild(mk("削除",()=>removeRow(kind,i)));
+  wrap.appendChild(head);
+
+  const addInput=(ph,key,mono,isArea)=>{
+    const el=document.createElement(isArea?"textarea":"input");
+    if(!isArea)el.type="text";
+    el.placeholder=ph; el.value=item[key]||"";
+    if(mono)el.classList.add("mono");
+    el.addEventListener("input",()=>{item[key]=el.value;update();});
+    wrap.appendChild(el);
+  };
+  if(kind==="steps"){
+    addInput("手順の内容 (例: LBからweb01を切り離す)","title");
+    addInput("コマンド / 操作 (任意)","cmd",true,true);
+    addInput("期待結果 (例: active (running) であること)","expect");
+  }else if(kind==="rollback"){
+    addInput("切り戻し手順の内容","title");
+    addInput("コマンド / 操作 (任意)","cmd",true,true);
+  }else{
+    addInput(kind==="pre"?"確認項目 (例: 直近バックアップが取得済みであること)":"確認項目 (例: 監視アラートがすべて解消していること)","text");
+  }
+  return wrap;
+}
+function buildRows(kind){
+  const box=$("rows-"+kind); box.innerHTML="";
+  const arr=state[kind];
+  arr.forEach((item,i)=>box.appendChild(rowTemplate(kind,item,i,arr.length)));
+}
+function addRow(kind){
+  state[kind].push(kind==="steps"?{title:"",cmd:"",expect:""}:kind==="rollback"?{title:"",cmd:""}:{text:""});
+  buildRows(kind); update();
+  const box=$("rows-"+kind); const last=box.lastElementChild&&box.lastElementChild.querySelector("input,textarea");
+  if(last)last.focus();
+}
+function removeRow(kind,i){state[kind].splice(i,1);buildRows(kind);update();}
+function moveRow(kind,i,d){
+  const arr=state[kind];const j=i+d;
+  if(j<0||j>=arr.length)return;
+  [arr[i],arr[j]]=[arr[j],arr[i]];buildRows(kind);update();
+}
+
+/* ====== preview ====== */
+function render(){
+  const m=state.meta;
+  const li=(arr)=>arr.filter(x=>(x.text||"").trim()).map(x=>`<li>${escBr(x.text)}</li>`).join("");
+  const stepHtml=(s,i)=>`
+    <div class="step">
+      <div class="step-head"><span class="cb"></span><span class="n">${i+1}</span><span class="t">${escBr(s.title)||"(未入力)"}</span></div>
+      ${(s.cmd||"").trim()||((s.expect||"").trim())?`<div class="step-body">
+        ${(s.cmd||"").trim()?`<pre class="mono">${esc(s.cmd)}</pre>`:""}
+        ${(s.expect||"").trim()?`<div class="expect"><b>期待結果:</b> ${escBr(s.expect)}</div>`:""}
+      </div>`:""}
+    </div>`;
+
+  const html=`
+    <p class="doc-title">作 業 手 順 書</p>
+    <p class="doc-sub">${esc(m.docid)||"&nbsp;"}</p>
+    <table class="meta-table">
+      <tr><th>作業名</th><td colspan="3">${esc(m.title)||'<span class="empty-hint">左のフォームに入力すると、ここに手順書が組み上がります</span>'}</td></tr>
+      <tr><th>作業日時</th><td>${esc(m.datetime)}</td><th>対象システム</th><td>${esc(m.system)}</td></tr>
+      <tr><th>作業場所</th><td>${esc(m.place)}</td><th>作業者 / 確認者</th><td>${esc(m.worker)}${m.worker&&m.checker?" / ":""}${esc(m.checker)}</td></tr>
+    </table>
+    <div class="stamp-row">
+      <div class="stamp"><div class="s-label">承認</div><div class="s-box"><span></span></div></div>
+      <div class="stamp"><div class="s-label">確認</div><div class="s-box"><span></span></div></div>
+      <div class="stamp"><div class="s-label">作成</div><div class="s-box"><span></span></div></div>
+    </div>
+
+    <h3>1. 作業概要</h3>
+    <p class="kv"><b>目的:</b> ${escBr(state.purpose)||"—"}</p>
+    <p class="kv"><b>影響範囲:</b> ${escBr(state.scope)||"—"}</p>
+    <p class="kv"><b>前提条件:</b> ${escBr(state.precond)||"—"}</p>
+
+    <h3>2. 事前確認</h3>
+    ${state.pre.length?`<ul class="check-list">${li(state.pre)}</ul>`:'<p class="empty-hint">— 項目なし —</p>'}
+
+    <h3>3. 作業手順</h3>
+    ${state.steps.length?state.steps.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
+
+    <h3>4. 切り戻し手順</h3>
+    ${(state.trigger||"").trim()?`<div class="rollback-trigger"><b>発動基準:</b> ${escBr(state.trigger)}</div>`:""}
+    ${state.rollback.length?state.rollback.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
+
+    <h3>5. 正常性確認</h3>
+    ${state.verify.length?`<ul class="check-list">${li(state.verify)}</ul>`:'<p class="empty-hint">— 項目なし —</p>'}
+
+    <h3>6. 備考・連絡体制</h3>
+    <p>${escBr(state.notes)||"—"}</p>
+
+    <div class="doc-footer"><span>${esc(m.docid)}</span><span>Generated with 手順書メーカー (tejun-lab)</span></div>
+  `;
+  $("doc").innerHTML=html;
+}
+
+/* ====== markdown ====== */
+function toMarkdown(){
+  const m=state.meta;
+  const L=[];
+  L.push(`# 作業手順書: ${m.title||"(無題)"}`);
+  L.push("");
+  L.push(`| 項目 | 内容 |`,`|---|---|`);
+  if(m.docid)L.push(`| 文書番号 | ${m.docid} |`);
+  if(m.datetime)L.push(`| 作業日時 | ${m.datetime} |`);
+  if(m.system)L.push(`| 対象システム | ${m.system} |`);
+  if(m.place)L.push(`| 作業場所 | ${m.place} |`);
+  if(m.worker)L.push(`| 作業者 | ${m.worker} |`);
+  if(m.checker)L.push(`| 確認者 | ${m.checker} |`);
+  L.push("","## 1. 作業概要","");
+  L.push(`- **目的**: ${state.purpose||"—"}`);
+  L.push(`- **影響範囲**: ${state.scope||"—"}`);
+  L.push(`- **前提条件**: ${state.precond||"—"}`);
+  L.push("","## 2. 事前確認","");
+  state.pre.forEach(x=>{if((x.text||"").trim())L.push(`- [ ] ${x.text}`);});
+  L.push("","## 3. 作業手順","");
+  state.steps.forEach((s,i)=>{
+    L.push(`### ${i+1}. ${s.title||""}`,"");
+    L.push(`- [ ] 実施`);
+    if((s.cmd||"").trim())L.push("","```sh",s.cmd,"```");
+    if((s.expect||"").trim())L.push("",`**期待結果**: ${s.expect}`);
+    L.push("");
+  });
+  L.push("## 4. 切り戻し手順","");
+  if((state.trigger||"").trim())L.push(`> **発動基準**: ${state.trigger}`,"");
+  state.rollback.forEach((s,i)=>{
+    L.push(`### R${i+1}. ${s.title||""}`,"");
+    if((s.cmd||"").trim())L.push("```sh",s.cmd,"```","");
+  });
+  L.push("## 5. 正常性確認","");
+  state.verify.forEach(x=>{if((x.text||"").trim())L.push(`- [ ] ${x.text}`);});
+  L.push("","## 6. 備考・連絡体制","");
+  L.push(state.notes||"—");
+  L.push("","---","*Generated with 手順書メーカー (tejun-lab)*");
+  return L.join("\n");
+}
+
+/* ====== persistence ====== */
+let saveTimer=null;
+function update(){
+  render();
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}},400);
+}
+function download(name,text,type){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type}));
+  a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+
+/* ====== wire up ====== */
+metaFields.forEach(k=>$("f-"+k).addEventListener("input",e=>{state.meta[k]=e.target.value;update();}));
+[["f-purpose","purpose"],["f-scope","scope"],["f-precond","precond"],["f-trigger","trigger"],["f-notes","notes"]]
+  .forEach(([id,key])=>$(id).addEventListener("input",e=>{state[key]=e.target.value;update();}));
+document.querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addRow(b.dataset.add)));
+
+$("btnSample").addEventListener("click",()=>{state=sampleState();syncFormFromState();update();toast("サンプルを読み込みました");});
+$("btnClear").addEventListener("click",()=>{
+  if(!confirm("入力内容をすべてクリアします。よろしいですか？"))return;
+  state=emptyState();syncFormFromState();update();toast("クリアしました");
+});
+$("btnMd").addEventListener("click",async()=>{
+  try{await navigator.clipboard.writeText(toMarkdown());toast("Markdownをコピーしました");}
+  catch(e){download("tejunsho.md",toMarkdown(),"text/markdown");toast("コピー不可のため .md をダウンロードしました");}
+});
+$("btnMdDl").addEventListener("click",()=>{download((state.meta.docid||"tejunsho")+".md",toMarkdown(),"text/markdown");toast(".md をダウンロードしました");});
+$("btnJsonSave").addEventListener("click",()=>{download((state.meta.docid||"tejunsho")+".json",JSON.stringify(state,null,2),"application/json");toast("JSONを保存しました");});
+$("btnJsonLoad").addEventListener("click",()=>$("fileInput").click());
+$("fileInput").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{
+    const d=JSON.parse(r.result);
+    if(!d.meta)throw new Error("形式が不正です");
+    state=Object.assign(emptyState(),d);
+    state.meta=Object.assign(emptyState().meta,d.meta);
+    syncFormFromState();update();toast("JSONを読み込みました");
+  }catch(err){toast("読み込みに失敗しました: "+err.message);}};
+  r.readAsText(f);e.target.value="";
+});
+$("btnPrint").addEventListener("click",()=>window.print());
+
+/* ====== CTA ====== */
+(function(){
+  const box=$("ctaActions");
+  const mk=(href,label,cls)=>{const a=document.createElement("a");a.className="btn "+(cls||"");a.href=href;a.target="_blank";a.rel="noopener";a.textContent=label;return a;};
+  if(LINKS.kit_booth)box.appendChild(mk(LINKS.kit_booth,"BOOTHで見る (¥1,980)"));
+  if(LINKS.kit_note)box.appendChild(mk(LINKS.kit_note,"noteで見る","sub"));
+  if(!LINKS.kit_booth&&!LINKS.kit_note){const s=document.createElement("span");s.className="soon";s.textContent="準備中 — 近日公開";box.appendChild(s);}
+  if(LINKS.repo)box.appendChild(mk(LINKS.repo,"GitHub","sub"));
+})();
+
+/* ====== init ====== */
+(function(){
+  let saved=null;
+  try{saved=JSON.parse(localStorage.getItem(LS_KEY));}catch(e){}
+  if(saved&&saved.meta){
+    state=Object.assign(emptyState(),saved);
+    state.meta=Object.assign(emptyState().meta,saved.meta);
+  }else{
+    state=sampleState();
+  }
+  syncFormFromState();render();
+})();
+</script>
+</body>
+</html>
