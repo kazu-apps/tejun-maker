@@ -642,10 +642,25 @@ function toText(){
   const W="=".repeat(64), D="-".repeat(64);
   const L=[];
   const ind=(s,pad)=>String(s||"-").split("\n").map(x=>pad+x).join("\r\n");
-  const cmdLines=(cmd)=>String(cmd||"").split("\n").filter(l=>l.trim()).map(l=>{
-    const t=l.trim();
-    return (/^[$#>]/.test(t)||/^\(/.test(t)) ? "      "+t : "      $ "+t;
-  });
+  /* コマンド欄内でシェル状態を追跡し $ / # を付与する。
+     su - や sudo -i の後続行は # 、exit で復帰。別ユーザへのsuやsshは $ のまま。
+     行頭に $ # > ( を自分で書いた場合はそれを尊重する。追跡は同じコマンド欄の中だけ
+     (手順をまたぐと別セッションの可能性があるため、跨ぐ場合は自分で # を書く)。 */
+  const cmdLines=(cmd)=>{
+    const out=[]; const stack=[];
+    const cur=()=>stack.length?stack[stack.length-1]:"$";
+    String(cmd||"").split("\n").filter(l=>l.trim()).forEach(l=>{
+      const t=l.trim();
+      if(/^[$#>]/.test(t)||/^\(/.test(t)){ out.push("      "+t); return; }
+      out.push("      "+cur()+" "+t);
+      if(/^(sudo\s+)?su(\s+-)?(\s+root)?\s*$/.test(t) || /^sudo\s+(-i|-s|bash|sh)\b/.test(t)) stack.push("#");
+      else if(/^su\s+(-\s+)?\w+/.test(t)) stack.push("$");
+      else if(/^ssh\s+root@/.test(t)) stack.push("#");
+      else if(/^ssh\s/.test(t)) stack.push("$");
+      else if(/^(exit|logout)\s*$/.test(t)) stack.pop();
+    });
+    return out;
+  };
   L.push(W);
   L.push("  作 業 手 順 書");
   L.push("  "+(m.title||"(無題)"));
