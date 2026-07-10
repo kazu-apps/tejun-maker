@@ -87,6 +87,8 @@ textarea{resize:vertical;min-height:56px}
   display:flex;flex-direction:column;gap:6px}
 .row-head{display:flex;align-items:center;gap:6px}
 .row-head .no{font-size:11px;color:var(--muted);min-width:2.2em;font-variant-numeric:tabular-nums}
+.row-head .drag{cursor:grab;color:var(--muted);user-select:none;padding:0 4px;font-size:13px}
+.row-head .drag:active{cursor:grabbing}
 .row-head .spacer{flex:1}
 .row-head button{padding:2px 8px;font-size:11px}
 .addbtn{border-style:dashed;color:var(--muted);width:100%}
@@ -191,6 +193,8 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
     <button id="btnSaveLib">ライブラリへ保存</button>
     <button id="btnJsonSave">JSON保存</button>
     <button id="btnJsonLoad">JSON読込</button>
+    <button id="btnTxt">テキストコピー</button>
+    <button id="btnTxtDl">.txtダウンロード</button>
     <button id="btnMd">Markdownコピー</button>
     <button id="btnMdDl">.mdダウンロード</button>
     <button id="btnPrint" class="primary">印刷 / PDF</button>
@@ -250,16 +254,16 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
     </section>
 
     <section class="card">
+      <h2>正常性確認</h2>
+      <div class="rows" id="rows-verify"></div>
+      <button class="addbtn" data-add="verify">＋ 確認項目を追加</button>
+    </section>
+
+    <section class="card">
       <h2>切り戻し</h2>
       <div class="rows" id="rows-rollback"></div>
       <button class="addbtn" id="btnAddPlan">＋ 切り戻しパターンを追加</button>
       <div class="pack-note">失敗する箇所で戻し方は変わります。「適用前に中断する場合」「適用後に戻す場合」のように、パターンごとに発動基準と手順を分けて書けます。</div>
-    </section>
-
-    <section class="card">
-      <h2>正常性確認</h2>
-      <div class="rows" id="rows-verify"></div>
-      <button class="addbtn" data-add="verify">＋ 確認項目を追加</button>
     </section>
 
     <section class="card">
@@ -404,10 +408,11 @@ function syncFormFromState(){
 function rowTemplate(kind,item,i,total){
   const wrap=document.createElement("div"); wrap.className="row-item";
   const head=document.createElement("div"); head.className="row-head";
-  head.innerHTML=`<span class="no">${i+1}.</span><span class="spacer"></span>`;
+  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="spacer"></span>`;
   const mk=(label,fn,disabled)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!disabled;b.addEventListener("click",fn);return b;};
   head.appendChild(mk("↑",()=>moveRow(kind,i,-1),i===0));
   head.appendChild(mk("↓",()=>moveRow(kind,i,1),i===total-1));
+  head.appendChild(mk("＋",()=>{state[kind].splice(i+1,0,kind==="steps"?{title:"",cmd:"",expect:""}:{text:"",cmd:""});buildRows(kind);update();}));
   head.appendChild(mk("削除",()=>removeRow(kind,i)));
   wrap.appendChild(head);
 
@@ -436,6 +441,23 @@ function buildRows(kind){
   const box=$("rows-"+kind); box.innerHTML="";
   const arr=state[kind];
   arr.forEach((item,i)=>box.appendChild(rowTemplate(kind,item,i,arr.length)));
+  enableDrag(box,()=>state[kind],()=>buildRows(kind));
+}
+/* ドラッグ&ドロップ並べ替え(コンテナ直下のrow-itemのみ対象) */
+function enableDrag(container,getArr,rebuild){
+  let from=null;
+  [...container.children].forEach((el,i)=>{
+    if(!el.classList.contains("row-item"))return;
+    const h=el.querySelector(":scope > .row-head > .drag"); if(!h)return;
+    h.addEventListener("dragstart",e=>{from=i;e.dataTransfer.effectAllowed="move";});
+    el.addEventListener("dragover",e=>e.preventDefault());
+    el.addEventListener("drop",e=>{
+      e.preventDefault();e.stopPropagation();
+      if(from===null||from===i){from=null;return;}
+      const arr=getArr();const[m]=arr.splice(from,1);arr.splice(i,0,m);
+      from=null;rebuild();update();
+    });
+  });
 }
 function addRow(kind){
   state[kind].push(kind==="steps"?{title:"",cmd:"",expect:""}:kind==="rollback"?{title:"",cmd:""}:{text:"",cmd:""});
@@ -469,7 +491,7 @@ function buildRollbackPlans(){
   state.rollback.forEach((pl,pi)=>{
     const wrap=document.createElement("div");wrap.className="row-item";
     const head=document.createElement("div");head.className="row-head";
-    head.innerHTML=`<span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="spacer"></span>`;
+    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="spacer"></span>`;
     head.appendChild(mk("↑",()=>{[state.rollback[pi-1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi-1]];buildRollbackPlans();update();},pi===0));
     head.appendChild(mk("↓",()=>{[state.rollback[pi+1],state.rollback[pi]]=[state.rollback[pi],state.rollback[pi+1]];buildRollbackPlans();update();},pi===state.rollback.length-1));
     head.appendChild(mk("削除",()=>{if(!confirm("このパターンを削除しますか?"))return;state.rollback.splice(pi,1);buildRollbackPlans();update();}));
@@ -482,9 +504,10 @@ function buildRollbackPlans(){
     (pl.steps||[]).forEach((s,si)=>{
       const sw=document.createElement("div");sw.className="row-item";
       const sh=document.createElement("div");sh.className="row-head";
-      sh.innerHTML=`<span class="no">R${si+1}.</span><span class="spacer"></span>`;
+      sh.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">R${si+1}.</span><span class="spacer"></span>`;
       sh.appendChild(mk("↑",()=>{[pl.steps[si-1],pl.steps[si]]=[pl.steps[si],pl.steps[si-1]];buildRollbackPlans();update();},si===0));
       sh.appendChild(mk("↓",()=>{[pl.steps[si+1],pl.steps[si]]=[pl.steps[si],pl.steps[si+1]];buildRollbackPlans();update();},si===pl.steps.length-1));
+      sh.appendChild(mk("＋",()=>{pl.steps.splice(si+1,0,{title:"",cmd:"",expect:""});buildRollbackPlans();update();}));
       sh.appendChild(mk("削除",()=>{pl.steps.splice(si,1);buildRollbackPlans();update();}));
       sw.appendChild(sh);
       const mkIn=(ph,key,mono,area)=>{const el=document.createElement(area?"textarea":"input");if(!area)el.type="text";el.placeholder=ph;el.value=s[key]||"";if(mono)el.classList.add("mono");el.addEventListener("input",()=>{s[key]=el.value;update();});sw.appendChild(el);};
@@ -494,11 +517,13 @@ function buildRollbackPlans(){
       stepsBox.appendChild(sw);
     });
     wrap.appendChild(stepsBox);
+    enableDrag(stepsBox,()=>pl.steps,buildRollbackPlans);
     const add=document.createElement("button");add.className="addbtn";add.textContent="＋ このパターンに手順を追加";
     add.addEventListener("click",()=>{pl.steps.push({title:"",cmd:"",expect:""});buildRollbackPlans();update();});
     wrap.appendChild(add);
     box.appendChild(wrap);
   });
+  enableDrag(box,()=>state.rollback,buildRollbackPlans);
 }
 
 /* ====== preview ====== */
@@ -539,15 +564,15 @@ function render(){
     <h3>3. 作業手順</h3>
     ${state.steps.length?state.steps.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
 
-    <h3>4. 切り戻し手順</h3>
+    <h3>4. 正常性確認</h3>
+    ${state.verify.length?`<ul class="check-list">${li(state.verify)}</ul>`:'<p class="empty-hint">— 項目なし —</p>'}
+
+    <h3>5. 切り戻し手順</h3>
     ${state.rollback.length?state.rollback.map((pl,pi)=>`
       <p class="kv"><b>パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+escBr(pl.name):""}</b></p>
       ${(pl.trigger||"").trim()?`<div class="rollback-trigger"><b>発動基準:</b> ${escBr(pl.trigger)}</div>`:""}
       ${(pl.steps||[]).length?pl.steps.map(stepHtml).join(""):'<p class="empty-hint">— 手順なし —</p>'}
     `).join(""):'<p class="empty-hint">— 切り戻しパターンなし —</p>'}
-
-    <h3>5. 正常性確認</h3>
-    ${state.verify.length?`<ul class="check-list">${li(state.verify)}</ul>`:'<p class="empty-hint">— 項目なし —</p>'}
 
     <h3>6. 備考・連絡体制</h3>
     <p>${escBr(state.notes)||"—"}</p>
@@ -588,7 +613,13 @@ function toMarkdown(){
     if((s.expect||"").trim())L.push("",`**期待結果**: ${s.expect}`);
     L.push("");
   });
-  L.push("## 4. 切り戻し手順","");
+  L.push("## 4. 正常性確認","");
+  state.verify.forEach(x=>{
+    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
+    L.push(`- [ ] ${x.text||""}`);
+    if((x.cmd||"").trim())L.push("","  ```sh","  "+x.cmd.split("\n").join("\n  "),"  ```","");
+  });
+  L.push("","## 5. 切り戻し手順","");
   state.rollback.forEach((pl,pi)=>{
     L.push(`### パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+pl.name:""}`,"");
     if((pl.trigger||"").trim())L.push(`> **発動基準**: ${pl.trigger}`,"");
@@ -599,16 +630,93 @@ function toMarkdown(){
       L.push("");
     });
   });
-  L.push("## 5. 正常性確認","");
-  state.verify.forEach(x=>{
-    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
-    L.push(`- [ ] ${x.text||""}`);
-    if((x.cmd||"").trim())L.push("","  ```sh","  "+x.cmd.split("\n").join("\n  "),"  ```","");
-  });
   L.push("","## 6. 備考・連絡体制","");
   L.push(state.notes||"—");
   L.push("","---","*Generated with 手順書メーカー (tejun-lab)*");
   return L.join("\n");
+}
+
+/* ====== text (サクラエディタ等向け・固定幅) ====== */
+function toText(){
+  const m=state.meta;
+  const W="=".repeat(64), D="-".repeat(64);
+  const L=[];
+  const ind=(s,pad)=>String(s||"-").split("\n").map(x=>pad+x).join("\r\n");
+  const cmdLines=(cmd)=>String(cmd||"").split("\n").filter(l=>l.trim()).map(l=>{
+    const t=l.trim();
+    return (/^[$#>]/.test(t)||/^\(/.test(t)) ? "      "+t : "      $ "+t;
+  });
+  L.push(W);
+  L.push("  作 業 手 順 書");
+  L.push("  "+(m.title||"(無題)"));
+  L.push(W);
+  if(m.docid)   L.push("  文書番号    : "+m.docid);
+  if(m.datetime)L.push("  作業日時    : "+m.datetime);
+  if(m.system)  L.push("  対象システム: "+m.system);
+  if(m.place)   L.push("  作業場所    : "+m.place);
+  if(m.worker)  L.push("  作業者      : "+m.worker);
+  if(m.checker) L.push("  確認者      : "+m.checker);
+  L.push(D);
+  L.push("  【表記】 □  = 実施チェック欄");
+  L.push("           $  = 一般ユーザで実行 (sudo含む)");
+  L.push("           #  = rootで実行");
+  L.push("           >> = 期待結果 (OK/NGを判断する条件)");
+  L.push(W);
+  L.push("");
+  L.push("■1. 作業概要");
+  L.push(D);
+  L.push("  ▼目的");     L.push(ind(state.purpose,"    "));
+  L.push("  ▼影響範囲"); L.push(ind(state.scope,"    "));
+  L.push("  ▼前提条件"); L.push(ind(state.precond,"    "));
+  L.push("");
+  L.push("■2. 事前確認");
+  L.push(D);
+  state.pre.forEach(x=>{
+    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
+    L.push("  □ "+(x.text||""));
+    L.push(...cmdLines(x.cmd));
+    L.push("");
+  });
+  L.push("■3. 作業手順");
+  L.push(D);
+  let n=0;
+  state.steps.forEach(s=>{
+    if((s.title||"").startsWith("――")){L.push("  "+s.title);L.push("");return;}
+    n++;
+    L.push(`  □ ${n}. ${s.title||""}  [実施時刻   :   ]`);
+    L.push(...cmdLines(s.cmd));
+    if((s.expect||"").trim())L.push("      >> "+s.expect);
+    L.push("");
+  });
+  L.push("■4. 正常性確認");
+  L.push(D);
+  state.verify.forEach(x=>{
+    if(!(x.text||"").trim()&&!(x.cmd||"").trim())return;
+    L.push("  □ "+(x.text||""));
+    L.push(...cmdLines(x.cmd));
+    L.push("");
+  });
+  L.push("■5. 切り戻し手順");
+  L.push(D);
+  state.rollback.forEach((pl,pi)=>{
+    L.push(`  ▼パターン${PLAN_LABELS[pi]||pi+1}${(pl.name||"").trim()?": "+pl.name:""}`);
+    if((pl.trigger||"").trim())L.push("  ※発動基準: "+pl.trigger.split("\n").join("\r\n              "));
+    L.push("");
+    (pl.steps||[]).forEach((s,i)=>{
+      L.push(`  □ R${i+1}. ${s.title||""}`);
+      L.push(...cmdLines(s.cmd));
+      if((s.expect||"").trim())L.push("      >> "+s.expect);
+      L.push("");
+    });
+  });
+  L.push("■6. 備考・連絡体制");
+  L.push(D);
+  L.push(ind(state.notes,"  "));
+  L.push("");
+  L.push(W);
+  L.push("  Generated with 手順書メーカー https://kazu-apps.github.io/tejun-maker/");
+  L.push(W);
+  return L.join("\r\n");
 }
 
 /* ====== persistence ====== */
@@ -918,6 +1026,11 @@ $("btnMd").addEventListener("click",async()=>{
   catch(e){download("tejunsho.md",toMarkdown(),"text/markdown");toast("コピー不可のため .md をダウンロードしました");}
 });
 $("btnMdDl").addEventListener("click",()=>{download((state.meta.docid||"tejunsho")+".md",toMarkdown(),"text/markdown");toast(".md をダウンロードしました");});
+$("btnTxt").addEventListener("click",async()=>{
+  try{await navigator.clipboard.writeText(toText());toast("テキストをコピーしました(サクラエディタ等に貼り付けOK)");}
+  catch(e){download((state.meta.docid||"tejunsho")+".txt","﻿"+toText(),"text/plain");toast("コピー不可のため .txt をダウンロードしました");}
+});
+$("btnTxtDl").addEventListener("click",()=>{download((state.meta.docid||"tejunsho")+".txt","﻿"+toText(),"text/plain");toast(".txt をダウンロードしました");});
 $("btnJsonSave").addEventListener("click",()=>{download((state.meta.docid||"tejunsho")+".json",JSON.stringify(state,null,2),"application/json");toast("JSONを保存しました");});
 $("btnJsonLoad").addEventListener("click",()=>$("fileInput").click());
 $("fileInput").addEventListener("change",e=>{
