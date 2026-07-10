@@ -230,7 +230,7 @@ select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px 9
     </section>
 
     <section class="card" style="position:sticky;top:56px;z-index:10">
-      <h2>目次(クリックでジャンプ)</h2>
+      <h2 id="outlineHead" style="cursor:pointer">目次(クリックでジャンプ) <button type="button" class="secTgl" id="outlineTgl">たたむ</button></h2>
       <div class="outline" id="outline"></div>
     </section>
 
@@ -425,7 +425,7 @@ function rowTemplate(kind,item,i,total){
   const open=OPEN.has(item);
   const summary=((kind==="steps"?item.title:item.text)||"").trim()||"(未入力)";
   const head=document.createElement("div"); head.className="row-head"+(open?"":" collapsed");
-  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="rsum" title="${esc(summary)}">${open?"":esc(summary)}</span><span class="spacer"></span>`;
+  head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no">${i+1}.</span><span class="rsum" title="${esc(summary)}">${open?"":esc(summary)}</span>`;
   const mk=(label,fn,disabled)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!disabled;b.addEventListener("click",fn);return b;};
   const toggle=()=>{open?OPEN.delete(item):OPEN.add(item);buildRows(kind);};
   head.querySelector(".rsum").addEventListener("click",toggle);
@@ -517,7 +517,7 @@ function buildRollbackPlans(){
     const open=OPEN.has(pl);
     const plSum=(pl.name||"").trim()||"(名称未設定)";
     const head=document.createElement("div");head.className="row-head"+(open?"":" collapsed");
-    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="rsum" title="${esc(plSum)}">${open?"":esc(plSum)}</span><span class="spacer"></span>`;
+    head.innerHTML=`<span class="drag" draggable="true" title="ドラッグで並べ替え">⠿</span><span class="no" style="min-width:5.5em;font-weight:700;color:var(--hanko)">パターン${PLAN_LABELS[pi]||pi+1}</span><span class="rsum" title="${esc(plSum)}">${open?"":esc(plSum)}</span>`;
     const togglePl=()=>{open?OPEN.delete(pl):OPEN.add(pl);buildRollbackPlans();};
     head.querySelector(".rsum").addEventListener("click",togglePl);
     head.appendChild(mk(open?"▾":"▸",togglePl));
@@ -564,10 +564,9 @@ function renderOutline(){
   let h="";
   h+=`<a class="osec" data-card="rows-pre">2. 事前確認 (${state.pre.length})</a>`;
   h+=`<a class="osec" data-card="rows-steps">3. 作業手順 (${state.steps.filter(s=>!(s.title||"").startsWith("――")).length})</a>`;
-  let n=0;
   state.steps.forEach((s,i)=>{
     const part=(s.title||"").startsWith("――");
-    const t=part?(s.title||""):`${++n}. ${(s.title||"").trim()||"(未入力)"}`;
+    const t=`${i+1}. ${(s.title||"").trim()||"(未入力)"}`;
     h+=`<a data-kind="steps" data-i="${i}" class="${part?"opart":""}">${esc(t)}</a>`;
   });
   h+=`<a class="osec" data-card="rows-verify">4. 正常性確認 (${state.verify.length})</a>`;
@@ -1100,8 +1099,17 @@ metaFields.forEach(k=>$("f-"+k).addEventListener("input",e=>{state.meta[k]=e.tar
   .forEach(([id,key])=>$(id).addEventListener("input",e=>{state[key]=e.target.value;update();}));
 document.querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addRow(b.dataset.add)));
 $("btnAddPlan").addEventListener("click",()=>{const np={name:"",trigger:"",steps:[{title:"",cmd:"",expect:""}]};OPEN.add(np);state.rollback.push(np);buildRollbackPlans();update();});
+const OUTLINE_LS="tejun-maker-outline-open";
+function setOutlineOpen(open){
+  $("outline").style.display=open?"":"none";
+  $("outlineTgl").textContent=open?"たたむ":"ひらく";
+  try{localStorage.setItem(OUTLINE_LS,open?"1":"0");}catch(e){}
+}
+$("outlineHead").addEventListener("click",()=>setOutlineOpen($("outline").style.display==="none"));
+setOutlineOpen(localStorage.getItem(OUTLINE_LS)!=="0");
 document.querySelectorAll(".secTgl").forEach(b=>b.addEventListener("click",e=>{
   e.stopPropagation();
+  if(b.id==="outlineTgl"){setOutlineOpen($("outline").style.display==="none");return;}
   const kind=b.dataset.sec;
   const arr=state[kind]||[];
   const anyOpen=arr.some(x=>OPEN.has(x));
